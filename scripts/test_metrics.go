@@ -2,10 +2,14 @@ package main
 
 import (
 	"time"
+
 	"sentinelx/detection"
 )
 
 func main() {
+
+	// Initialize Prometheus metrics
+	detection.InitPrometheusMetrics()
 
 	go detection.StartMetricsReporter()
 

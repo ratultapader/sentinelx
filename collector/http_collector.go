@@ -4,6 +4,10 @@ import (
 	"fmt"      // Used to print the generated event to console
 	"net/http" // Provides HTTP server and request handling
 	"time"     // Used to measure request processing time
+	"sentinelx/pipeline"
+	"sentinelx/models"
+
+	
 )
 
 // HTTPCollector is a middleware.
@@ -25,7 +29,8 @@ func HTTPCollector(next http.Handler) http.Handler {
 		duration := time.Since(start)
 
 		// Create a new security event of type "http_request"
-		event := NewSecurityEvent("http_request")
+		event := models.NewSecurityEvent("http_request")
+
 
 		// Capture the source IP address of the client
 		event.SourceIP = r.RemoteAddr
@@ -39,7 +44,8 @@ func HTTPCollector(next http.Handler) http.Handler {
 		event.Metadata["method"] = r.Method
 
 		// Requested URL path
-		event.Metadata["path"] = r.URL.Path
+		event.Metadata["path"] = r.URL.RequestURI()
+
 
 		// User agent (browser / client info)
 		event.Metadata["user_agent"] = r.UserAgent()
@@ -52,13 +58,15 @@ func HTTPCollector(next http.Handler) http.Handler {
 			event.PayloadSize = int(r.ContentLength)
 		}
 
-		// Convert the event into JSON format
 		jsonData, err := event.ToJSON()
 
-		// If JSON conversion succeeds, print the event
-		if err == nil {
-			fmt.Println(string(jsonData))
-		}
+if err == nil {
+    fmt.Println(string(jsonData))
+
+    // send event to pipeline
+	fmt.Println("DEBUG: publishing event to pipeline")
+    pipeline.PublishEvent(event)
+}
 
 	})
 }

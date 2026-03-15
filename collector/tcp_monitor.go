@@ -7,6 +7,7 @@ import (
 	"strconv"  // Used to convert string ↔ integer
 	// "strings"  // (Imported but not used in this file)
 	"time"     // Used to measure connection duration
+	"sentinelx/models"
 )
 
 // StartTCPMonitor starts a TCP server that monitors incoming connections
@@ -60,7 +61,7 @@ func handleConnection(conn net.Conn) {
 	// -------- CONNECTION OPEN EVENT --------
 
 	// Create security event when connection opens
-	openEvent := NewSecurityEvent("connection_open")
+	openEvent := models.NewSecurityEvent("connection_open")
 
 	openEvent.SourceIP = host      // Client IP
 	openEvent.SourcePort = portInt // Client port

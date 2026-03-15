@@ -27,6 +27,10 @@ func RecordRequest(latency time.Duration, bytes int) {
 	Metrics.RequestCount++
 	Metrics.TotalLatency += latency
 	Metrics.TotalBytes += bytes
+
+	// Prometheus metrics update
+	RequestCounter.Inc()
+	BytesCounter.Add(float64(bytes))
 }
 
 // RecordConnection records a TCP connection
@@ -36,6 +40,9 @@ func RecordConnection() {
 	defer Metrics.mu.Unlock()
 
 	Metrics.ConnectionCount++
+
+	// Prometheus metric update
+	ConnectionCounter.Inc()
 }
 
 // RecordError records system errors
@@ -45,6 +52,9 @@ func RecordError() {
 	defer Metrics.mu.Unlock()
 
 	Metrics.ErrorCount++
+
+	// Prometheus metric update
+	ErrorCounter.Inc()
 }
 
 // StartMetricsReporter prints metrics every second
