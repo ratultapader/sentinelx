@@ -1,0 +1,4 @@
+{"timestamp":1773648433,"severity":"CRITICAL","type":"SQL_INJECTION","source_ip":"[::1]","description":"SQL injection attempt detected"}
+{"timestamp":1773660259,"severity":"CRITICAL","type":"SQL_INJECTION","source_ip":"[::1]","description":"SQL injection attempt detected"}
+{"timestamp":1773664187,"severity":"CRITICAL","type":"SQL_INJECTION","source_ip":"[::1]","description":"SQL injection attempt detected"}
+{"timestamp":1773664331,"severity":"CRITICAL","type":"SQL_INJECTION","source_ip":":","description":"SQL injection attempt detected"}

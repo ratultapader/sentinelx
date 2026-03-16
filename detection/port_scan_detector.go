@@ -42,10 +42,9 @@ func (d *PortScanDetector) ProcessEvent(event models.SecurityEvent) {
 	if len(d.ipPorts[ip]) > 20 {
 
 		GenerateAlert(
-	"HIGH",
-	"port_scan",
-	ip,
-	"Multiple ports scanned in short time",
+    "PORT_SCAN",
+    ip,
+    "Multiple ports scanned",
 )
 
 		delete(d.ipPorts, ip)

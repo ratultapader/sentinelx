@@ -70,11 +70,10 @@ fmt.Println("DEBUG: decoded path =", data)
 	if detectPattern(data, sqlInjectionPatterns) {
 
 		GenerateAlert(
-			"HIGH",
-			"sql_injection",
-			event.SourceIP,
-			"SQL injection attempt detected",
-		)
+    "SQL_INJECTION",
+    event.SourceIP,
+    "SQL injection attempt detected",
+)
 
 		return
 	}
@@ -83,11 +82,10 @@ fmt.Println("DEBUG: decoded path =", data)
 	if detectPattern(data, xssPatterns) {
 
 		GenerateAlert(
-			"HIGH",
-			"xss_attack",
-			event.SourceIP,
-			"Cross-site scripting attempt detected",
-		)
+    "XSS_ATTACK",
+    event.SourceIP,
+    "Cross-site scripting attempt detected",
+)
 
 		return
 	}
@@ -96,11 +94,10 @@ fmt.Println("DEBUG: decoded path =", data)
 	if detectPattern(data, traversalPatterns) {
 
 		GenerateAlert(
-			"HIGH",
-			"directory_traversal",
-			event.SourceIP,
-			"Directory traversal attempt detected",
-		)
+    "DIR_TRAVERSAL",
+    event.SourceIP,
+    "Directory traversal attempt detected",
+)
 
 		return
 	}
