@@ -11,6 +11,7 @@ import (
 	"sentinelx/threatintel"
 	"sentinelx/metrics"
 	"sentinelx/api"
+	"sentinelx/correlation"
 	
 	
 )
@@ -36,7 +37,14 @@ func main() {
 	err = storage.InitLogger("logs/security_events.json")
 	if err != nil {
 		panic(err)
+
 	}
+
+	// ✅ ADD THIS (Day 23 DB init)
+err = storage.InitDB()
+if err != nil {
+	panic(err)
+}
 
 	// Initialize alert engine
 	fmt.Println("Initializing alert engine...")
@@ -68,8 +76,26 @@ go metrics.StartMetricsReporter()
 
 func processEvent(event models.SecurityEvent) {
 
-	metrics.RecordEvent(event.EventType, event.SourceIP)
+	// ✅ Save event
+	storage.SaveEvent(event)
 
+	// ✅ Metrics
+	metrics.RecordEvent(event.SourceIP, event.EventType)
+
+	// ✅ Correlation tracking (ADD THIS)
+	correlation.RecordEvent(event.SourceIP, event.EventType)
+
+	// 🔥 Correlation detection
+	if correlation.DetectMultiStage(event.SourceIP) {
+
+		detection.GenerateAlert(
+			"MULTI_STAGE_ATTACK",
+			event.SourceIP,
+			"Possible coordinated attack detected",
+		)
+	}
+
+	// Existing logic
 	if threatintel.IsMaliciousIP(event.SourceIP) {
 
 		detection.GenerateAlert(

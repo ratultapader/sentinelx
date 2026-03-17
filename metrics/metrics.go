@@ -2,29 +2,59 @@ package metrics
 
 import "sync"
 
-var mutex sync.Mutex
+// Global mutex (shared across package)
+var mu sync.RWMutex
 
+// Core counters
 var TotalEvents int
 var TotalAlerts int
 
+// Aggregation maps
 var AttackTypes = make(map[string]int)
 var AttackerIPs = make(map[string]int)
 
-func RecordEvent(eventType string, ip string) {
+//
+// =====================
+// EVENT METRICS
+// =====================
+//
 
-	mutex.Lock()
-	defer mutex.Unlock()
+// Call when event is processed
+func RecordEvent(ip string, attackType string) {
+	mu.Lock()
+	defer mu.Unlock()
 
 	TotalEvents++
 
-	AttackTypes[eventType]++
-	AttackerIPs[ip]++
+	if attackType != "" {
+		AttackTypes[attackType]++
+	}
+
+	if ip != "" {
+		AttackerIPs[ip]++
+	}
 }
 
+// Call when alert is generated
 func RecordAlert() {
-
-	mutex.Lock()
-	defer mutex.Unlock()
+	mu.Lock()
+	defer mu.Unlock()
 
 	TotalAlerts++
+}
+
+// Track attack type
+func RecordAttackType(attackType string) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	AttackTypes[attackType]++
+}
+
+// Track attacker IP
+func RecordAttackerIP(ip string) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	AttackerIPs[ip]++
 }

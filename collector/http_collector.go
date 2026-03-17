@@ -6,7 +6,7 @@ import (
 	"time"     // Used to measure request processing time
 	"sentinelx/pipeline"
 	"sentinelx/models"
-	"strings"
+	// "strings"
 	"net"
 
 	
@@ -35,11 +35,12 @@ func HTTPCollector(next http.Handler) http.Handler {
 
 
 		// Capture the source IP address of the client
-		host, _, _ := net.SplitHostPort(r.RemoteAddr)
-event.SourceIP = host
-if idx := strings.LastIndex(event.SourceIP, ":"); idx != -1 {
-	event.SourceIP = event.SourceIP[:idx]
+host, _, err := net.SplitHostPort(r.RemoteAddr)
+if err != nil {
+	host = r.RemoteAddr
 }
+
+event.SourceIP = host
 
 		// Capture the HTTP protocol version (HTTP/1.1, HTTP/2 etc.)
 		event.Protocol = r.Proto

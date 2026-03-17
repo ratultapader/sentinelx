@@ -4,6 +4,8 @@ import (
 	"sentinelx/detection"
 	"sentinelx/models"
 	"sentinelx/pipeline"
+	"sentinelx/storage"
+	"sentinelx/metrics" 
 )
 
 func main() {
@@ -19,6 +21,14 @@ func main() {
 
 func processEvent(event models.SecurityEvent) {
 
+	// ✅ 1. Save event to DB
+	storage.SaveEvent(event)
+
+	// ✅ 2. Record metrics
+	// (IMPORTANT: correct order)
+	metrics.RecordEvent(event.SourceIP, event.Type)
+
+	// ✅ 3. Run detection engines
 	detection.ScanDetector.ProcessEvent(event)
 	detection.WAF.ProcessEvent(event)
 	detection.ThreatIntel.ProcessEvent(event)
