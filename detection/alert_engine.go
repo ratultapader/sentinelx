@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sentinelx/correlation"
+	"sentinelx/incident"
 	"sentinelx/metrics"
 	"sentinelx/models"
 	"sentinelx/storage"
@@ -22,44 +23,39 @@ var alertMu sync.RWMutex
 
 // InitAlertEngine initializes the alert system
 func InitAlertEngine(size int) {
-
 	AlertQueue = make(chan models.Alert, size)
-
 	fmt.Println("Alert Engine initialized")
 }
 
 // GenerateAlert creates and pushes alert to queue
 func GenerateAlert(alertType, ip, description string) {
-
 	severity := ClassifySeverity(alertType)
 
 	alert := models.Alert{
-		Timestamp:   time.Now().Unix(),
+		ID:          fmt.Sprintf("ALT-%d", time.Now().UnixNano()),
+		Timestamp:   time.Now(),
 		Type:        alertType,
 		SourceIP:    ip,
 		Severity:    severity,
 		Description: description,
 	}
 
-	// =========================
-	// ✅ CORRELATION ENGINE
-	// =========================
-
 	// Record real attack event
 	correlation.RecordEvent(ip, alertType)
 
 	// Detect multi-stage attack
 	if correlation.DetectMultiStage(ip) {
-
 		multiAlert := models.Alert{
-			Timestamp:   time.Now().Unix(),
+			ID:          fmt.Sprintf("ALT-%d", time.Now().UnixNano()),
+			Timestamp:   time.Now(),
 			Type:        "MULTI_STAGE_ATTACK",
 			SourceIP:    ip,
-			Severity:    "HIGH",
+			Severity:    "CRITICAL",
 			Description: "Possible coordinated attack detected",
 		}
 
-		// Push safely (non-blocking)
+		incident.CreateIncident(multiAlert.ID, multiAlert.Type, multiAlert.Severity)
+
 		select {
 		case AlertQueue <- multiAlert:
 		default:
@@ -67,14 +63,12 @@ func GenerateAlert(alertType, ip, description string) {
 		}
 	}
 
-	// =========================
-	// EXISTING FLOW
-	// =========================
-
 	// Deduplication check
 	if shouldSuppress(alert) {
 		return
 	}
+
+	incident.CreateIncident(alert.ID, alert.Type, alert.Severity)
 
 	select {
 	case AlertQueue <- alert:
@@ -85,11 +79,9 @@ func GenerateAlert(alertType, ip, description string) {
 
 // StartAlertProcessor consumes alerts from queue
 func StartAlertProcessor() {
-
 	fmt.Println("Alert Processor started")
 
 	for alert := range AlertQueue {
-
 		fmt.Println("DEBUG: alert received in processor")
 
 		AddRecentAlert(alert)
@@ -104,50 +96,33 @@ func StartAlertProcessor() {
 	}
 }
 
-//
-// =====================
-// DISPATCHERS
-// =====================
-//
-
 // dispatchConsole prints alerts to terminal
 func dispatchConsole(alert models.Alert) {
-
 	metrics.RecordAlert()
 
 	fmt.Println("========= SECURITY ALERT =========")
-
+	fmt.Println("ID:", alert.ID)
 	fmt.Println("Type:", alert.Type)
 	fmt.Println("Source IP:", alert.SourceIP)
 	fmt.Println("Severity:", alert.Severity)
 	fmt.Println("Description:", alert.Description)
 	fmt.Println("Timestamp:", alert.Timestamp)
-
 	fmt.Println("==================================")
 }
 
 // dispatchLog stores alert in persistent log
 func dispatchLog(alert models.Alert) {
-
 	storage.LogAlert(alert)
-	storage.SaveAlert(alert) // persistent storage
+	storage.SaveAlert(alert)
 }
-
-//
-// =====================
-// RECENT ALERTS (Dashboard)
-// =====================
-//
 
 // AddRecentAlert stores alert for dashboard
 func AddRecentAlert(alert models.Alert) {
-
 	alertMu.Lock()
 	defer alertMu.Unlock()
 
 	recentAlerts = append(recentAlerts, alert)
 
-	// Keep only last 50 alerts
 	if len(recentAlerts) > 50 {
 		recentAlerts = recentAlerts[1:]
 	}
@@ -155,14 +130,12 @@ func AddRecentAlert(alert models.Alert) {
 
 // GetRecentAlerts returns a safe copy
 func GetRecentAlerts() []models.Alert {
-
 	alertMu.RLock()
 	defer alertMu.RUnlock()
 
 	cpy := make([]models.Alert, len(recentAlerts))
 	copy(cpy, recentAlerts)
 
-	// newest first
 	for i, j := 0, len(cpy)-1; i < j; i, j = i+1, j-1 {
 		cpy[i], cpy[j] = cpy[j], cpy[i]
 	}
@@ -170,35 +143,27 @@ func GetRecentAlerts() []models.Alert {
 	return cpy
 }
 
-//
-// =====================
-// SEVERITY CLASSIFICATION
-// =====================
-//
-
 // ClassifySeverity determines severity automatically
 func ClassifySeverity(alertType string) string {
-
 	switch alertType {
-
 	case "PORT_SCAN":
 		return "MEDIUM"
-
 	case "SQL_INJECTION":
 		return "CRITICAL"
-
 	case "XSS_ATTACK":
 		return "HIGH"
-
 	case "DIR_TRAVERSAL":
 		return "HIGH"
-
 	case "BRUTE_FORCE":
 		return "HIGH"
-
 	case "MULTI_STAGE_ATTACK":
-		return "CRITICAL" // 👈 upgrade severity
-
+		return "CRITICAL"
+	case "THREAT_INTEL_MATCH":
+		return "CRITICAL"
+	case "repeated_http_requests":
+		return "HIGH"
+	case "admin_access_watch":
+		return "CRITICAL"
 	default:
 		return "LOW"
 	}

@@ -20,3 +20,13 @@
 {"timestamp":1773756617,"severity":"HIGH","type":"MULTI_STAGE_ATTACK","source_ip":"::1","description":"Possible coordinated attack detected"}
 {"timestamp":1773756982,"severity":"CRITICAL","type":"SQL_INJECTION","source_ip":"::1","description":"SQL injection attempt detected"}
 {"timestamp":1773756983,"severity":"CRITICAL","type":"MULTI_STAGE_ATTACK","source_ip":"::1","description":"Possible coordinated attack detected"}
+{"id":"ALT-1774008837735334324","timestamp":"2026-03-20T12:13:57.735340383Z","type":"XSS_ATTACK","source_ip":"::1","severity":"HIGH","description":"Cross-site scripting attempt detected"}
+{"id":"ALT-1774008866814568746","timestamp":"2026-03-20T12:14:26.814575095Z","type":"DIR_TRAVERSAL","source_ip":"::1","severity":"HIGH","description":"Directory traversal attempt detected"}
+{"id":"ALT-1774010545692675497","timestamp":"2026-03-20T12:42:25.692681886Z","type":"XSS_ATTACK","source_ip":"::1","severity":"HIGH","description":"Cross-site scripting attempt detected"}
+{"id":"ALT-1774010545732828907","timestamp":"2026-03-20T12:42:25.732835562Z","type":"DIR_TRAVERSAL","source_ip":"::1","severity":"HIGH","description":"Directory traversal attempt detected"}
+{"id":"ALT-1774010892672914659","timestamp":"2026-03-20T12:48:12.6729173Z","type":"XSS_ATTACK","source_ip":"::1","severity":"HIGH","description":"Cross-site scripting attempt detected"}
+{"id":"ALT-1774010892687191270","timestamp":"2026-03-20T12:48:12.687193643Z","type":"DIR_TRAVERSAL","source_ip":"::1","severity":"HIGH","description":"Directory traversal attempt detected"}
+{"id":"ALT-1774013655946386675","timestamp":"2026-03-20T13:34:15.946387886Z","type":"THREAT_INTEL_MATCH","source_ip":"::1","severity":"CRITICAL","description":"Source IP matched external threat intelligence feed"}
+{"id":"ALT-1774018127242850075","timestamp":"2026-03-20T14:48:47.242852067Z","type":"THREAT_INTEL_MATCH","source_ip":"::1","severity":"CRITICAL","description":"Source IP matched external threat intelligence feed"}
+{"id":"ALT-1774018127318440176","timestamp":"2026-03-20T14:48:47.318445883Z","type":"repeated_http_requests","source_ip":"::1","severity":"HIGH","description":"Rule engine matched: repeated_http_requests"}
+{"id":"ALT-1774019972157714624","timestamp":"2026-03-20T15:19:32.15772048Z","type":"THREAT_INTEL_MATCH","source_ip":"::1","severity":"CRITICAL","description":"Source IP matched external threat intelligence feed"}

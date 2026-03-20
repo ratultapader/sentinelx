@@ -1,0 +1,10 @@
+rules:
+  - name: repeated_http_requests
+    event_type: http_request
+    threshold: 5
+    severity: HIGH
+
+  - name: admin_access_watch
+    event_type: admin_login
+    threshold: 1
+    severity: CRITICAL

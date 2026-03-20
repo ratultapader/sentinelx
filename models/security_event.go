@@ -21,11 +21,12 @@ type SecurityEvent struct {
 
 // Alert structure moved here to avoid import cycle
 type Alert struct {
-	Timestamp   int64  `json:"timestamp"`
-	Severity    string `json:"severity"`
-	Type        string `json:"type"`
-	SourceIP    string `json:"source_ip"`
-	Description string `json:"description"`
+	ID          string    `json:"id"`
+	Timestamp   time.Time `json:"timestamp"`
+	Type        string    `json:"type"`
+	SourceIP    string    `json:"source_ip"`
+	Severity    string    `json:"severity"`
+	Description string    `json:"description"`
 }
 
 func NewSecurityEvent(eventType string) SecurityEvent {
