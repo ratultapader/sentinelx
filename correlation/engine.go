@@ -1,8 +1,10 @@
 package correlation
 
 import (
-	"sync"
 	"time"
+	"sync"
+
+	"sentinelx/models"
 )
 
 // =====================
@@ -23,15 +25,14 @@ var mu sync.Mutex
 // RECORD EVENTS
 // =====================
 
-// RecordEvent stores attack activity for correlation
+// RecordEvent stores attack activity for correlation.
 func RecordEvent(ip string, eventType string) {
-
 	mu.Lock()
 	defer mu.Unlock()
 
 	record, exists := attackCache[ip]
 
-	// If new IP → create record
+	// If new IP -> create record
 	if !exists {
 		attackCache[ip] = &attackRecord{
 			events:    []string{eventType},
@@ -41,7 +42,7 @@ func RecordEvent(ip string, eventType string) {
 		return
 	}
 
-	// 🔥 Reset window after 30 seconds (NEW ATTACK WINDOW)
+	// Reset window after 30 seconds
 	if time.Since(record.lastSeen) > 30*time.Second {
 		record.events = []string{eventType}
 		record.triggered = false
@@ -53,7 +54,7 @@ func RecordEvent(ip string, eventType string) {
 	record.events = append(record.events, eventType)
 	record.lastSeen = time.Now()
 
-	// Keep only last 5 events (memory control)
+	// Keep only last 5 events
 	if len(record.events) > 5 {
 		record.events = record.events[1:]
 	}
@@ -63,9 +64,8 @@ func RecordEvent(ip string, eventType string) {
 // MULTI-STAGE DETECTION
 // =====================
 
-// DetectMultiStage checks if attack pattern looks coordinated
+// DetectMultiStage checks if attack pattern looks coordinated.
 func DetectMultiStage(ip string) bool {
-
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -74,7 +74,7 @@ func DetectMultiStage(ip string) bool {
 		return false
 	}
 
-	// ❌ Already triggered → don't repeat
+	// already triggered
 	if record.triggered {
 		return false
 	}
@@ -83,16 +83,52 @@ func DetectMultiStage(ip string) bool {
 	foundMultiple := len(record.events) >= 3
 
 	for _, e := range record.events {
-		if e == "SQL_INJECTION" {
+		if e == "SQL_INJECTION" || e == "sql_injection" {
 			foundSQL = true
 		}
 	}
 
-	// ✅ Condition: multiple events + SQL attack
+	// multiple suspicious events + SQL activity
 	if foundSQL && foundMultiple {
-		record.triggered = true // mark triggered
+		record.triggered = true
 		return true
 	}
 
 	return false
+}
+
+// BuildMultiStageAlert creates a standardized multi-stage attack alert.
+func BuildMultiStageAlert(ip string) *models.Alert {
+	mu.Lock()
+	record, exists := attackCache[ip]
+	if !exists {
+		mu.Unlock()
+		return nil
+	}
+
+	eventsCopy := make([]string, len(record.events))
+	copy(eventsCopy, record.events)
+	mu.Unlock()
+
+	alert := models.Alert{
+		ID:          generateCorrelationAlertID(),
+		Timestamp:   time.Now().UTC(),
+		Type:        "multi_stage_attack",
+		Severity:    models.SeverityCritical,
+		SourceIP:    ip,
+		Description: "Possible coordinated multi-stage attack detected",
+		ThreatScore: 0.99,
+		Status:      models.AlertStatusNew,
+		Metadata: map[string]interface{}{
+			"correlated_events": eventsCopy,
+			"event_count":       len(eventsCopy),
+		},
+	}
+
+	return &alert
+}
+
+// generateCorrelationAlertID generates a unique alert ID for correlation alerts.
+func generateCorrelationAlertID() string {
+	return "ALT-" + time.Now().UTC().Format("20060102150405.000000000")
 }

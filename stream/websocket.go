@@ -1,11 +1,14 @@
 package stream
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
-	"fmt"
 
 	"github.com/gorilla/websocket"
+
+	"sentinelx/models"
 )
 
 // Store connected clients
@@ -23,34 +26,36 @@ var upgrader = websocket.Upgrader{
 
 // Handle incoming WebSocket connections
 func HandleConnections(w http.ResponseWriter, r *http.Request) {
-
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		fmt.Println("DEBUG: WebSocket upgrade failed")
+		fmt.Println("DEBUG: WebSocket upgrade failed:", err)
 		return
 	}
 
-	fmt.Println("DEBUG: new WebSocket client connected") // ✅ ADD THIS
+	fmt.Println("DEBUG: new WebSocket client connected")
 
 	mu.Lock()
 	clients[ws] = true
 	mu.Unlock()
 }
 
-// Broadcast alert to all connected clients
-func BroadcastAlert(message []byte) {
+// BroadcastAlert sends the full alert object to all connected clients.
+func BroadcastAlert(alert models.Alert) {
+	message, err := json.Marshal(alert)
+	if err != nil {
+		fmt.Println("DEBUG: failed to marshal alert:", err)
+		return
+	}
 
 	mu.Lock()
 	defer mu.Unlock()
 
-	fmt.Println("DEBUG: broadcasting to", len(clients), "clients") // ✅ ADD THIS
+	fmt.Println("DEBUG: broadcasting to", len(clients), "clients")
 
 	for client := range clients {
-
 		err := client.WriteMessage(websocket.TextMessage, message)
-
 		if err != nil {
-			fmt.Println("DEBUG: removing disconnected client") // ✅ ADD
+			fmt.Println("DEBUG: removing disconnected client")
 			client.Close()
 			delete(clients, client)
 		}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -46,7 +47,9 @@ func GetRules() []models.Rule {
 	return out
 }
 
-func ProcessEvent(event models.SecurityEvent) *models.Rule {
+// ProcessEvent evaluates a security event against loaded YAML rules.
+// If a rule matches, it returns a fully built alert.
+func ProcessEvent(event models.SecurityEvent) *models.Alert {
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -61,10 +64,51 @@ func ProcessEvent(event models.SecurityEvent) *models.Rule {
 		if eventCounter[key] >= rule.Threshold {
 			eventCounter[key] = 0
 
-			matchedRule := rule
-			return &matchedRule
+			score := models.ThreatScoreFromSeverity(rule.Severity)
+
+			alert := models.Alert{
+				ID:          generateRuleAlertID(),
+				Timestamp:   time.Now().UTC(),
+				Type:        normalizeRuleName(rule.Name),
+				Severity:    rule.Severity,
+				SourceIP:    event.SourceIP,
+				Description: buildRuleDescription(rule, event),
+				ThreatScore: score,
+				Status:      models.AlertStatusNew,
+				Metadata: map[string]interface{}{
+					"rule_name":   rule.Name,
+					"event_type":  rule.EventType,
+					"threshold":   rule.Threshold,
+					"match_count": rule.Threshold,
+				},
+			}
+
+			return &alert
 		}
 	}
 
 	return nil
+}
+
+func generateRuleAlertID() string {
+	return "ALT-" + time.Now().UTC().Format("20060102150405.000000000")
+}
+
+func normalizeRuleName(name string) string {
+	switch name {
+	case "repeated_http_requests":
+		return "repeated_http_requests"
+	case "admin_access_watch":
+		return "admin_access_watch"
+	default:
+		return name
+	}
+}
+
+func buildRuleDescription(rule models.Rule, event models.SecurityEvent) string {
+	if rule.Description != "" {
+		return rule.Description
+	}
+
+	return fmt.Sprintf("Rule matched: %s for event type %s from source %s", rule.Name, rule.EventType, event.SourceIP)
 }

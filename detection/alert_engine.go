@@ -1,15 +1,14 @@
 package detection
 
 import (
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
 	"sentinelx/correlation"
-	"sentinelx/incident"
 	"sentinelx/metrics"
 	"sentinelx/models"
+	"sentinelx/response"
 	"sentinelx/storage"
 	"sentinelx/stream"
 )
@@ -33,11 +32,14 @@ func GenerateAlert(alertType, ip, description string) {
 
 	alert := models.Alert{
 		ID:          fmt.Sprintf("ALT-%d", time.Now().UnixNano()),
-		Timestamp:   time.Now(),
+		Timestamp:   time.Now().UTC(),
 		Type:        alertType,
 		SourceIP:    ip,
 		Severity:    severity,
 		Description: description,
+		ThreatScore: models.ThreatScoreFromSeverity(severity),
+		Status:      models.AlertStatusNew,
+		Metadata:    map[string]interface{}{},
 	}
 
 	// Record real attack event
@@ -45,21 +47,24 @@ func GenerateAlert(alertType, ip, description string) {
 
 	// Detect multi-stage attack
 	if correlation.DetectMultiStage(ip) {
+		multiSeverity := ClassifySeverity("MULTI_STAGE_ATTACK")
+
 		multiAlert := models.Alert{
 			ID:          fmt.Sprintf("ALT-%d", time.Now().UnixNano()),
-			Timestamp:   time.Now(),
+			Timestamp:   time.Now().UTC(),
 			Type:        "MULTI_STAGE_ATTACK",
 			SourceIP:    ip,
-			Severity:    "CRITICAL",
+			Severity:    multiSeverity,
 			Description: "Possible coordinated attack detected",
+			ThreatScore: models.ThreatScoreFromSeverity(multiSeverity),
+			Status:      models.AlertStatusNew,
+			Metadata:    map[string]interface{}{},
 		}
-
-		incident.CreateIncident(multiAlert.ID, multiAlert.Type, multiAlert.Severity)
 
 		select {
 		case AlertQueue <- multiAlert:
 		default:
-			fmt.Println("Alert queue full — dropping multi-stage alert")
+			fmt.Println("Alert queue full - dropping multi-stage alert")
 		}
 	}
 
@@ -68,12 +73,10 @@ func GenerateAlert(alertType, ip, description string) {
 		return
 	}
 
-	incident.CreateIncident(alert.ID, alert.Type, alert.Severity)
-
 	select {
 	case AlertQueue <- alert:
 	default:
-		fmt.Println("Alert queue full — dropping alert")
+		fmt.Println("Alert queue full - dropping alert")
 	}
 }
 
@@ -83,17 +86,44 @@ func StartAlertProcessor() {
 
 	for alert := range AlertQueue {
 		fmt.Println("DEBUG: alert received in processor")
+		alert = applyThreatScoring(alert)
 
 		AddRecentAlert(alert)
 
-		data, _ := json.Marshal(alert)
-		fmt.Println("DEBUG: broadcasting alert:", string(data))
-
-		stream.BroadcastAlert(data)
+		fmt.Println("DEBUG: broadcasting alert:", alert.ID)
+		stream.BroadcastAlert(alert)
 
 		dispatchConsole(alert)
 		dispatchLog(alert)
+		response.ProcessAlert(alert)
 	}
+}
+
+func applyThreatScoring(alert models.Alert) models.Alert {
+	scorer := NewThreatScorer()
+
+	signals := DefaultSignalsFromEvent(
+		alert.ID,
+		alert.Type,
+		alert.SourceIP,
+		alert.Target,
+		alert.Description,
+		alert.Severity,
+	)
+	signals.Metadata = alert.Metadata
+
+	result := scorer.ScoreWithContext(signals)
+
+	alert.Severity = result.Severity
+	alert.ThreatScore = result.ThreatScore
+
+	meta := result.ToAlertMetadata()
+	for k, v := range alert.Metadata {
+		meta[k] = v
+	}
+	alert.Metadata = meta
+
+	return alert
 }
 
 // dispatchConsole prints alerts to terminal
@@ -105,6 +135,8 @@ func dispatchConsole(alert models.Alert) {
 	fmt.Println("Type:", alert.Type)
 	fmt.Println("Source IP:", alert.SourceIP)
 	fmt.Println("Severity:", alert.Severity)
+	fmt.Println("Threat Score:", alert.ThreatScore)
+	fmt.Println("Status:", alert.Status)
 	fmt.Println("Description:", alert.Description)
 	fmt.Println("Timestamp:", alert.Timestamp)
 	fmt.Println("==================================")
@@ -147,24 +179,24 @@ func GetRecentAlerts() []models.Alert {
 func ClassifySeverity(alertType string) string {
 	switch alertType {
 	case "PORT_SCAN":
-		return "MEDIUM"
+		return models.SeverityMedium
 	case "SQL_INJECTION":
-		return "CRITICAL"
+		return models.SeverityCritical
 	case "XSS_ATTACK":
-		return "HIGH"
+		return models.SeverityHigh
 	case "DIR_TRAVERSAL":
-		return "HIGH"
+		return models.SeverityHigh
 	case "BRUTE_FORCE":
-		return "HIGH"
+		return models.SeverityHigh
 	case "MULTI_STAGE_ATTACK":
-		return "CRITICAL"
+		return models.SeverityCritical
 	case "THREAT_INTEL_MATCH":
-		return "CRITICAL"
+		return models.SeverityCritical
 	case "repeated_http_requests":
-		return "HIGH"
+		return models.SeverityHigh
 	case "admin_access_watch":
-		return "CRITICAL"
+		return models.SeverityCritical
 	default:
-		return "LOW"
+		return models.SeverityLow
 	}
 }

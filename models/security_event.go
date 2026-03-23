@@ -19,18 +19,44 @@ type SecurityEvent struct {
 	Metadata    map[string]string `json:"metadata"`
 }
 
-// Alert structure moved here to avoid import cycle
+// Alert structure used across detection, storage, websocket, API, and incident handling.
 type Alert struct {
-	ID          string    `json:"id"`
-	Timestamp   time.Time `json:"timestamp"`
-	Type        string    `json:"type"`
-	SourceIP    string    `json:"source_ip"`
-	Severity    string    `json:"severity"`
-	Description string    `json:"description"`
+	ID          string                 `json:"id"`
+	Timestamp   time.Time              `json:"timestamp"`
+	Type        string                 `json:"type"`
+	Severity    string                 `json:"severity"`
+	SourceIP    string                 `json:"source_ip,omitempty"`
+	Target      string                 `json:"target,omitempty"`
+	Description string                 `json:"description,omitempty"`
+	ThreatScore float64                `json:"threat_score"`
+	Status      string                 `json:"status"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+}
+
+const (
+	SeverityLow      = "low"
+	SeverityMedium   = "medium"
+	SeverityHigh     = "high"
+	SeverityCritical = "critical"
+
+	AlertStatusNew       = "new"
+	AlertStatusProcessed = "processed"
+)
+
+func ThreatScoreFromSeverity(severity string) float64 {
+	switch severity {
+	case SeverityCritical:
+		return 0.95
+	case SeverityHigh:
+		return 0.75
+	case SeverityMedium:
+		return 0.55
+	default:
+		return 0.30
+	}
 }
 
 func NewSecurityEvent(eventType string) SecurityEvent {
-
 	return SecurityEvent{
 		EventID:   uuid.New().String(),
 		Timestamp: time.Now().UnixNano(),

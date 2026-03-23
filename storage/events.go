@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"sentinelx/models"
@@ -16,16 +17,29 @@ func SaveEvent(event models.SecurityEvent) {
 	message := fmt.Sprintf("event_type=%s", event.EventType)
 
 	if path, ok := event.Metadata["path"]; ok {
-		message = path
+		message = fmt.Sprintf("%v", path)
 	} else if method, ok := event.Metadata["method"]; ok {
-		message = fmt.Sprintf("%s %s", method, event.EventType)
+		message = fmt.Sprintf("%v %s", method, event.EventType)
 	}
 
-	DB.Exec(
+	_, err := DB.Exec(
 		query,
 		time.Now(),
 		event.EventType,
 		event.SourceIP,
 		message,
 	)
+	if err != nil {
+		log.Println("failed to save event:", err)
+		return
+	}
+
+	IndexSecurityEventDoc(map[string]interface{}{
+		"id":         event.EventID,
+		"timestamp":  time.Unix(0, event.Timestamp).UTC(),
+		"event_type": event.EventType,
+		"source_ip":  event.SourceIP,
+		"protocol":   event.Protocol,
+		"metadata":   event.Metadata,
+	}, event.EventID)
 }

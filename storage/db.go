@@ -10,7 +10,6 @@ import (
 var DB *sql.DB
 
 func InitDB() error {
-
 	var err error
 
 	DB, err = sql.Open("sqlite3", "./sentinelx.db")
@@ -24,7 +23,6 @@ func InitDB() error {
 }
 
 func createTables() error {
-
 	eventTable := `
 	CREATE TABLE IF NOT EXISTS events (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,12 +34,16 @@ func createTables() error {
 
 	alertTable := `
 	CREATE TABLE IF NOT EXISTS alerts (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		id TEXT PRIMARY KEY,
 		timestamp DATETIME,
 		type TEXT,
 		severity TEXT,
 		source_ip TEXT,
-		description TEXT
+		target TEXT,
+		description TEXT,
+		threat_score REAL,
+		status TEXT,
+		metadata TEXT
 	);`
 
 	_, err := DB.Exec(eventTable)
@@ -50,5 +52,9 @@ func createTables() error {
 	}
 
 	_, err = DB.Exec(alertTable)
-	return err
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

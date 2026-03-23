@@ -1,8 +1,8 @@
 package detection
 
 import (
-	"fmt"
 	"sentinelx/models"
+	"time"
 )
 
 type ThreatIntelEngine struct{}
@@ -16,18 +16,27 @@ var maliciousIPs = map[string]string{
 	"103.145.13.44":  "Malware distribution server",
 }
 
-func (t *ThreatIntelEngine) ProcessEvent(event models.SecurityEvent) {
-
+// ProcessEvent checks whether the source IP matches known threat intelligence.
+func (t *ThreatIntelEngine) ProcessEvent(event models.SecurityEvent) *models.Alert {
 	reason, exists := maliciousIPs[event.SourceIP]
-
-	if exists {
-
-		fmt.Println("SECURITY ALERT")
-		fmt.Println("Type: malicious_ip_detected")
-		fmt.Println("Severity: CRITICAL")
-		fmt.Println("Source IP:", event.SourceIP)
-		fmt.Println("Description: Known malicious IP -", reason)
-		fmt.Println("-----------------------------------")
-
+	if !exists {
+		return nil
 	}
+
+	alert := models.Alert{
+		ID:          generateAlertID(),
+		Timestamp:   time.Now().UTC(),
+		Type:        "threat_intel_match",
+		Severity:    models.SeverityCritical,
+		SourceIP:    event.SourceIP,
+		Description: "Source IP matched known malicious threat feed",
+		ThreatScore: 0.98,
+		Status:      models.AlertStatusNew,
+		Metadata: map[string]interface{}{
+			"matched_ip": event.SourceIP,
+			"reason":     reason,
+		},
+	}
+
+	return &alert
 }

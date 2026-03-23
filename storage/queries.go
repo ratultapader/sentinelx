@@ -1,5 +1,7 @@
 package storage
 
+import "encoding/json"
+
 type EventRecord struct {
 	ID        int    `json:"id"`
 	Timestamp string `json:"timestamp"`
@@ -9,7 +11,6 @@ type EventRecord struct {
 }
 
 func GetEvents(ip string, eventType string) ([]EventRecord, error) {
-
 	query := "SELECT id, timestamp, type, source_ip, message FROM events WHERE 1=1"
 	args := []interface{}{}
 
@@ -41,7 +42,6 @@ func GetEvents(ip string, eventType string) ([]EventRecord, error) {
 			&e.SourceIP,
 			&e.Message,
 		)
-
 		if err != nil {
 			return nil, err
 		}
@@ -55,19 +55,24 @@ func GetEvents(ip string, eventType string) ([]EventRecord, error) {
 // ================= ALERTS =================
 
 type AlertRecord struct {
-	ID        int    `json:"id"`
-	Timestamp string `json:"timestamp"`
-	Type      string `json:"type"`
-	Severity  string `json:"severity"`
-	SourceIP  string `json:"source_ip"`
-	Message   string `json:"message"`
+	ID          string                 `json:"id"`
+	Timestamp   string                 `json:"timestamp"`
+	Type        string                 `json:"type"`
+	Severity    string                 `json:"severity"`
+	SourceIP    string                 `json:"source_ip"`
+	Target      string                 `json:"target,omitempty"`
+	Description string                 `json:"description"`
+	ThreatScore float64                `json:"threat_score"`
+	Status      string                 `json:"status"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 }
 
 func GetAlerts(severity string) ([]AlertRecord, error) {
-
-	// ⚠ IMPORTANT: your DB column is "description"
-	query := "SELECT id, timestamp, type, severity, source_ip, description FROM alerts WHERE 1=1"
-
+	query := `
+	SELECT id, timestamp, type, severity, source_ip, target, description, threat_score, status, metadata
+	FROM alerts
+	WHERE 1=1
+	`
 	args := []interface{}{}
 
 	if severity != "" {
@@ -85,6 +90,7 @@ func GetAlerts(severity string) ([]AlertRecord, error) {
 
 	for rows.Next() {
 		var a AlertRecord
+		var metadataJSON string
 
 		err := rows.Scan(
 			&a.ID,
@@ -92,11 +98,18 @@ func GetAlerts(severity string) ([]AlertRecord, error) {
 			&a.Type,
 			&a.Severity,
 			&a.SourceIP,
-			&a.Message, // maps description → message
+			&a.Target,
+			&a.Description,
+			&a.ThreatScore,
+			&a.Status,
+			&metadataJSON,
 		)
-
 		if err != nil {
 			return nil, err
+		}
+
+		if metadataJSON != "" {
+			_ = json.Unmarshal([]byte(metadataJSON), &a.Metadata)
 		}
 
 		alerts = append(alerts, a)
