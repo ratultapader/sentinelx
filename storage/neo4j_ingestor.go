@@ -11,6 +11,19 @@ type Neo4jIngestor struct {
 	store *Neo4jGraphStore
 }
 
+func getResponseAction(severity string) string {
+	switch strings.ToLower(strings.TrimSpace(severity)) {
+	case "critical":
+		return "block_ip"
+	case "high":
+		return "rate_limit"
+	case "medium":
+		return "monitor"
+	default:
+		return "alert_only"
+	}
+}
+
 func NewNeo4jIngestor(store *Neo4jGraphStore) *Neo4jIngestor {
 	return &Neo4jIngestor{
 		store: store,
@@ -18,6 +31,11 @@ func NewNeo4jIngestor(store *Neo4jGraphStore) *Neo4jIngestor {
 }
 
 func (i *Neo4jIngestor) IngestAttackRecord(ctx context.Context, record AttackGraphRecord) error {
+	tenantID := strings.TrimSpace(record.TenantID)
+	if tenantID == "" {
+		return fmt.Errorf("tenant_id is required")
+	}
+
 	sourceIPKey := strings.TrimSpace(record.SourceIP)
 	alertKey := strings.TrimSpace(record.AlertID)
 
@@ -31,6 +49,7 @@ func (i *Neo4jIngestor) IngestAttackRecord(ctx context.Context, record AttackGra
 		Properties: map[string]interface{}{
 			"key":       sourceIPKey,
 			"ip":        sourceIPKey,
+			"tenant_id": tenantID,
 			"last_seen": record.Timestamp.Format(time.RFC3339Nano),
 		},
 	}
@@ -42,12 +61,16 @@ func (i *Neo4jIngestor) IngestAttackRecord(ctx context.Context, record AttackGra
 		Label: NodeAlert,
 		Key:   alertKey,
 		Properties: map[string]interface{}{
-			"key":          alertKey,
-			"alert_id":     record.AlertID,
-			"event_type":   record.EventType,
-			"severity":     record.Severity,
-			"threat_score": record.ThreatScore,
-			"timestamp":    record.Timestamp.Format(time.RFC3339Nano),
+			"key":                alertKey,
+			"alert_id":           record.AlertID,
+			"tenant_id":          tenantID,
+			"event_type":         record.EventType,
+			"severity":           record.Severity,
+			"threat_score":       record.ThreatScore,
+			"timestamp":          record.Timestamp.Format(time.RFC3339Nano),
+			"mitre_tactic":       record.MitreTactic,
+			"mitre_technique":    record.MitreTechnique,
+			"mitre_technique_id": record.MitreTechniqueID,
 		},
 	}
 	if err := i.store.UpsertNode(ctx, alertNode); err != nil {
@@ -73,8 +96,9 @@ func (i *Neo4jIngestor) IngestAttackRecord(ctx context.Context, record AttackGra
 			Label: NodeServer,
 			Key:   serverKey,
 			Properties: map[string]interface{}{
-				"key":  serverKey,
-				"name": serverKey,
+				"key":       serverKey,
+				"name":      serverKey,
+				"tenant_id": tenantID,
 			},
 		}
 		if err := i.store.UpsertNode(ctx, serverNode); err != nil {
@@ -104,8 +128,9 @@ func (i *Neo4jIngestor) IngestAttackRecord(ctx context.Context, record AttackGra
 			Label: NodeAPIEndpoint,
 			Key:   endpointKey,
 			Properties: map[string]interface{}{
-				"key":      endpointKey,
-				"endpoint": endpointKey,
+				"key":       endpointKey,
+				"endpoint":  endpointKey,
+				"tenant_id": tenantID,
 			},
 		}
 		if err := i.store.UpsertNode(ctx, endpointNode); err != nil {
@@ -114,17 +139,19 @@ func (i *Neo4jIngestor) IngestAttackRecord(ctx context.Context, record AttackGra
 
 		if strings.TrimSpace(record.Server) != "" {
 			serverKey := strings.TrimSpace(record.Server)
-			if err := i.store.UpsertRelationship(ctx, GraphRelationship{
-				Type:      RelConnectedTo,
-				FromLabel: NodeServer,
-				FromKey:   serverKey,
-				ToLabel:   NodeAPIEndpoint,
-				ToKey:     endpointKey,
-				Properties: map[string]interface{}{
-					"timestamp": record.Timestamp.Format(time.RFC3339Nano),
-				},
-			}); err != nil {
-				return err
+			if serverKey != endpointKey {
+				if err := i.store.UpsertRelationship(ctx, GraphRelationship{
+					Type:      RelConnectedTo,
+					FromLabel: NodeServer,
+					FromKey:   serverKey,
+					ToLabel:   NodeAPIEndpoint,
+					ToKey:     endpointKey,
+					Properties: map[string]interface{}{
+						"timestamp": record.Timestamp.Format(time.RFC3339Nano),
+					},
+				}); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -148,8 +175,9 @@ func (i *Neo4jIngestor) IngestAttackRecord(ctx context.Context, record AttackGra
 			Label: NodeContainer,
 			Key:   containerKey,
 			Properties: map[string]interface{}{
-				"key":  containerKey,
-				"name": containerKey,
+				"key":       containerKey,
+				"name":      containerKey,
+				"tenant_id": tenantID,
 			},
 		}
 		if err := i.store.UpsertNode(ctx, containerNode); err != nil {
@@ -158,17 +186,19 @@ func (i *Neo4jIngestor) IngestAttackRecord(ctx context.Context, record AttackGra
 
 		if strings.TrimSpace(record.Server) != "" {
 			serverKey := strings.TrimSpace(record.Server)
-			if err := i.store.UpsertRelationship(ctx, GraphRelationship{
-				Type:      RelConnectedTo,
-				FromLabel: NodeServer,
-				FromKey:   serverKey,
-				ToLabel:   NodeContainer,
-				ToKey:     containerKey,
-				Properties: map[string]interface{}{
-					"timestamp": record.Timestamp.Format(time.RFC3339Nano),
-				},
-			}); err != nil {
-				return err
+			if serverKey != containerKey {
+				if err := i.store.UpsertRelationship(ctx, GraphRelationship{
+					Type:      RelConnectedTo,
+					FromLabel: NodeServer,
+					FromKey:   serverKey,
+					ToLabel:   NodeContainer,
+					ToKey:     containerKey,
+					Properties: map[string]interface{}{
+						"timestamp": record.Timestamp.Format(time.RFC3339Nano),
+					},
+				}); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -191,34 +221,34 @@ func (i *Neo4jIngestor) IngestAttackRecord(ctx context.Context, record AttackGra
 		}
 	}
 
-	if strings.TrimSpace(record.ResponseAction) != "" {
-		responseKey := fmt.Sprintf("%s:%s", alertKey, record.ResponseAction)
+	actionType := getResponseAction(record.Severity)
+	responseKey := fmt.Sprintf("%s:%s", alertKey, actionType)
 
-		responseNode := GraphNode{
-			Label: NodeResponseAction,
-			Key:   responseKey,
-			Properties: map[string]interface{}{
-				"key":         responseKey,
-				"action_type": record.ResponseAction,
-				"timestamp":   record.Timestamp.Format(time.RFC3339Nano),
-			},
-		}
-		if err := i.store.UpsertNode(ctx, responseNode); err != nil {
-			return err
-		}
+	responseNode := GraphNode{
+		Label: NodeResponseAction,
+		Key:   responseKey,
+		Properties: map[string]interface{}{
+			"key":         responseKey,
+			"action_type": actionType,
+			"tenant_id":   tenantID,
+			"timestamp":   record.Timestamp.Format(time.RFC3339Nano),
+		},
+	}
+	if err := i.store.UpsertNode(ctx, responseNode); err != nil {
+		return err
+	}
 
-		if err := i.store.UpsertRelationship(ctx, GraphRelationship{
-			Type:      RelMitigatedBy,
-			FromLabel: NodeAlert,
-			FromKey:   alertKey,
-			ToLabel:   NodeResponseAction,
-			ToKey:     responseKey,
-			Properties: map[string]interface{}{
-				"timestamp": record.Timestamp.Format(time.RFC3339Nano),
-			},
-		}); err != nil {
-			return err
-		}
+	if err := i.store.UpsertRelationship(ctx, GraphRelationship{
+		Type:      RelMitigatedBy,
+		FromLabel: NodeAlert,
+		FromKey:   alertKey,
+		ToLabel:   NodeResponseAction,
+		ToKey:     responseKey,
+		Properties: map[string]interface{}{
+			"timestamp": record.Timestamp.Format(time.RFC3339Nano),
+		},
+	}); err != nil {
+		return err
 	}
 
 	return nil

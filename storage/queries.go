@@ -90,7 +90,7 @@ func GetAlerts(severity string) ([]AlertRecord, error) {
 
 	for rows.Next() {
 		var a AlertRecord
-		var metadataJSON string
+		var metadataJSON []byte
 
 		err := rows.Scan(
 			&a.ID,
@@ -108,8 +108,11 @@ func GetAlerts(severity string) ([]AlertRecord, error) {
 			return nil, err
 		}
 
-		if metadataJSON != "" {
-			_ = json.Unmarshal([]byte(metadataJSON), &a.Metadata)
+		if len(metadataJSON) > 0 {
+			err := json.Unmarshal(metadataJSON, &a.Metadata)
+			if err != nil {
+				a.Metadata = map[string]interface{}{}
+			}
 		}
 
 		alerts = append(alerts, a)

@@ -1,79 +1,113 @@
 package collector
 
 import (
-	"fmt"      // Used to print the generated event to console
-	"net/http" // Provides HTTP server and request handling
-	"time"     // Used to measure request processing time
-	"sentinelx/pipeline"
-	"sentinelx/models"
-	// "strings"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net"
+	"net/http"
+	"time"
 
-	
+	"sentinelx/models"
+	"sentinelx/multi_tenant"
+	"sentinelx/pipeline"
 )
 
-// HTTPCollector is a middleware.
-// It intercepts every HTTP request and creates a security event from it.
+// ===============================
+// HTTP COLLECTOR (FIXED)
+// ===============================
 func HTTPCollector(next http.Handler) http.Handler {
-
-	// Return a new HTTP handler function
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		// Record the start time of the request
-		// Used later to measure latency
 		start := time.Now()
 
-		// Call the next handler in the HTTP chain
-		// This allows the real application logic to execute
+		// ===============================
+		// TENANT CHECK
+		// ===============================
+		tenantID := multi_tenant.TenantIDFromRequest(r)
+		if tenantID == "" {
+			fmt.Println("no tenant, skipping http event")
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// ===============================
+		// SAFE BODY READ (FIX)
+		// ===============================
+		var payload struct {
+			SourceIP string `json:"source_ip"`
+			Payload  string `json:"payload"`
+		}
+
+		var bodyBytes []byte
+		if r.Body != nil {
+			bodyBytes, _ = io.ReadAll(r.Body)
+
+			// restore body for next handler
+			r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+			// decode safely
+			_ = json.Unmarshal(bodyBytes, &payload)
+		}
+
+		// ===============================
+		// CONTINUE REQUEST
+		// ===============================
 		next.ServeHTTP(w, r)
 
-		// Calculate how long the request took
 		duration := time.Since(start)
 
-		// Create a new security event of type "http_request"
+		// ===============================
+		// CREATE EVENT
+		// ===============================
 		event := models.NewSecurityEvent("http_request")
+		event.TenantID = tenantID
 
+		// ===============================
+		// FIXED SOURCE IP LOGIC
+		// ===============================
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			host = r.RemoteAddr
+		}
 
-		// Capture the source IP address of the client
-host, _, err := net.SplitHostPort(r.RemoteAddr)
-if err != nil {
-	host = r.RemoteAddr
-}
+		// OVERRIDE WITH PAYLOAD
+		if payload.SourceIP != "" {
+			host = payload.SourceIP
+		}
 
-event.SourceIP = host
+		event.SourceIP = host
 
-		// Capture the HTTP protocol version (HTTP/1.1, HTTP/2 etc.)
+		// ===============================
+		// METADATA
+		// ===============================
 		event.Protocol = r.Proto
-
-		// Store additional request details inside metadata
-
-		// HTTP method used (GET, POST, PUT etc.)
 		event.Metadata["method"] = r.Method
-
-		// Requested URL path
 		event.Metadata["path"] = r.URL.RequestURI()
-
-
-		// User agent (browser / client info)
 		event.Metadata["user_agent"] = r.UserAgent()
-
-		// How long the request took to complete
 		event.Metadata["latency"] = duration.String()
 
-		// If request has body data, store its size
+		// ===============================
+		// ADD PAYLOAD TO METADATA (CRITICAL FIX)
+		// ===============================
+		if payload.Payload != "" {
+			event.Metadata["payload"] = payload.Payload
+		}
+
 		if r.ContentLength > 0 {
 			event.PayloadSize = int(r.ContentLength)
 		}
 
+		// ===============================
+		// DEBUG + PIPELINE
+		// ===============================
 		jsonData, err := event.ToJSON()
+		if err == nil {
+			fmt.Println(string(jsonData))
+			fmt.Println("DEBUG: publishing event to pipeline")
 
-if err == nil {
-    fmt.Println(string(jsonData))
-
-    // send event to pipeline
-	fmt.Println("DEBUG: publishing event to pipeline")
-    pipeline.PublishEvent(event)
-}
-
+			ctx := multi_tenant.WithTenantID(r.Context(), tenantID)
+			pipeline.PublishEvent(ctx, event)
+		}
 	})
 }

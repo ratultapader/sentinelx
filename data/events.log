@@ -1,0 +1,4 @@
+{"severity":"critical","source_ip":"1.1.1.1","destination":"/login","timestamp":"2026-03-27T10:00:00Z","threat_score":0.95}
+{"severity":"high","source_ip":"2.2.2.2","destination":"/admin","timestamp":"2026-03-27T10:05:00Z","threat_score":0.85}
+{"severity":"medium","source_ip":"3.3.3.3","destination":"/api","timestamp":"2026-03-27T10:10:00Z","threat_score":0.65}
+{"severity":"low","source_ip":"4.4.4.4","destination":"/home","timestamp":"2026-03-27T10:15:00Z","threat_score":0.25}

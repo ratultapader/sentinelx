@@ -39,8 +39,10 @@ var traversalPatterns = []string{
 
 // ProcessEvent analyzes HTTP request events and returns generated alerts.
 func (w *WAFEngine) ProcessEvent(event models.SecurityEvent) *models.Alert {
-	// Only inspect HTTP requests
+
 	fmt.Println("DEBUG: WAF analyzing request")
+
+	// Only inspect HTTP requests
 	if event.EventType != "http_request" {
 		return nil
 	}
@@ -50,78 +52,109 @@ func (w *WAFEngine) ProcessEvent(event models.SecurityEvent) *models.Alert {
 		return nil
 	}
 
-	path, exists := event.Metadata["path"]
-	if !exists {
+	// ===============================
+	// SAFE TYPE CAST (CRITICAL FIX)
+	// ===============================
+	pathStr := ""
+	if v, ok := event.Metadata["path"].(string); ok {
+		pathStr = v
+	}
+
+	payloadStr := ""
+	if v, ok := event.Metadata["payload"].(string); ok {
+		payloadStr = v
+	}
+
+	// allow detection from either path or payload
+	if pathStr == "" && payloadStr == "" {
 		return nil
 	}
 
-	decodedPath, err := url.QueryUnescape(path)
+	// ===============================
+	// DECODE PATH
+	// ===============================
+	decodedPath, err := url.QueryUnescape(pathStr)
 	if err == nil {
-		path = decodedPath
+		pathStr = decodedPath
 	}
 
-	data := strings.ToLower(path)
+	// COMBINE BOTH (CRITICAL FIX)
+	combined := strings.ToLower(pathStr + " " + payloadStr)
 
-	// DEBUG point
+	data := combined
+
 	fmt.Println("DEBUG: decoded path =", data)
 
+	// ===============================
+	// METADATA
+	// ===============================
 	metadata := map[string]interface{}{
-		"path": path,
+		"path": pathStr,
+	}
+
+	if payloadStr != "" {
+		metadata["payload"] = payloadStr
 	}
 
 	if method, ok := event.Metadata["method"]; ok {
 		metadata["method"] = method
 	}
 
-	// SQL Injection detection
+	// ===============================
+	// SQL INJECTION
+	// ===============================
 	if detectPattern(data, sqlInjectionPatterns) {
-		alert := models.Alert{
+		return &models.Alert{
 			ID:          generateAlertID(),
+			TenantID:    event.TenantID,
 			Timestamp:   time.Now().UTC(),
 			Type:        "sql_injection",
 			Severity:    models.SeverityCritical,
 			SourceIP:    event.SourceIP,
-			Target:      path,
+			Target:      pathStr,
 			Description: "SQL injection payload detected",
 			ThreatScore: 0.95,
 			Status:      models.AlertStatusNew,
 			Metadata:    metadata,
 		}
-		return &alert
 	}
 
-	// XSS detection
+	// ===============================
+	// XSS
+	// ===============================
 	if detectPattern(data, xssPatterns) {
-		alert := models.Alert{
+		return &models.Alert{
 			ID:          generateAlertID(),
+			TenantID:    event.TenantID,
 			Timestamp:   time.Now().UTC(),
 			Type:        "xss_attack",
 			Severity:    models.SeverityHigh,
 			SourceIP:    event.SourceIP,
-			Target:      path,
+			Target:      pathStr,
 			Description: "Cross-site scripting payload detected",
 			ThreatScore: 0.80,
 			Status:      models.AlertStatusNew,
 			Metadata:    metadata,
 		}
-		return &alert
 	}
 
-	// Directory traversal detection
+	// ===============================
+	// DIRECTORY TRAVERSAL
+	// ===============================
 	if detectPattern(data, traversalPatterns) {
-		alert := models.Alert{
+		return &models.Alert{
 			ID:          generateAlertID(),
+			TenantID:    event.TenantID,
 			Timestamp:   time.Now().UTC(),
 			Type:        "dir_traversal",
 			Severity:    models.SeverityHigh,
 			SourceIP:    event.SourceIP,
-			Target:      path,
+			Target:      pathStr,
 			Description: "Directory traversal payload detected",
 			ThreatScore: 0.85,
 			Status:      models.AlertStatusNew,
 			Metadata:    metadata,
 		}
-		return &alert
 	}
 
 	return nil

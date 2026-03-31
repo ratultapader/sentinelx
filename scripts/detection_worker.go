@@ -29,7 +29,7 @@ func main() {
 
 func processEvent(event models.SecurityEvent) {
 
-	// ✅ Threat feed malicious IP check
+	// Threat feed malicious IP check
 	if threatfeed.IsMalicious(event.SourceIP) {
 		detection.GenerateAlert(
 			"THREAT_INTEL_MATCH",
@@ -38,7 +38,7 @@ func processEvent(event models.SecurityEvent) {
 		)
 	}
 
-	// ✅ Rule engine check
+	// Rule engine check
 	rule := ruleengine.ProcessEvent(event)
 	if rule != nil {
 		detection.GenerateAlert(
@@ -48,13 +48,20 @@ func processEvent(event models.SecurityEvent) {
 		)
 	}
 
-	// ✅ 1. Save event to DB
+	// Save event to DB
 	storage.SaveEvent(event)
 
-	// ✅ 2. Record metrics
-	metrics.RecordEvent(event.SourceIP, event.Type)
+	// Record metrics after detection
+	detected := event.EventType
+	if rule != nil {
+		if v, ok := rule.Metadata["detected_type"].(string); ok {
+			detected = v
+		}
+	}
 
-	// ✅ 3. Run detection engines
+	metrics.RecordEvent(event.SourceIP, event.EventType, detected)
+
+	// Run detection engines
 	detection.ScanDetector.ProcessEvent(event)
 	detection.WAF.ProcessEvent(event)
 	detection.ThreatIntel.ProcessEvent(event)

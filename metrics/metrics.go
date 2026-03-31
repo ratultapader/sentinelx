@@ -20,14 +20,16 @@ var AttackerIPs = make(map[string]int)
 //
 
 // Call when event is processed
-func RecordEvent(ip string, attackType string) {
+func RecordEvent(ip string, eventType string, detectedType string) {
 	mu.Lock()
 	defer mu.Unlock()
 
 	TotalEvents++
 
-	if attackType != "" {
-		AttackTypes[attackType]++
+	if detectedType != "" {
+		AttackTypes[detectedType]++
+	} else if eventType != "" {
+		AttackTypes[eventType]++
 	}
 
 	if ip != "" {
@@ -36,25 +38,13 @@ func RecordEvent(ip string, attackType string) {
 }
 
 // Call when alert is generated
-func RecordAlert() {
+func RecordAlert(attackType string) {
 	mu.Lock()
 	defer mu.Unlock()
 
 	TotalAlerts++
-}
 
-// Track attack type
-func RecordAttackType(attackType string) {
-	mu.Lock()
-	defer mu.Unlock()
-
-	AttackTypes[attackType]++
-}
-
-// Track attacker IP
-func RecordAttackerIP(ip string) {
-	mu.Lock()
-	defer mu.Unlock()
-
-	AttackerIPs[ip]++
+	if attackType != "" {
+		AttackTypes[attackType]++
+	}
 }

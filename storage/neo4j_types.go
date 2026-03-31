@@ -2,6 +2,10 @@ package storage
 
 import "time"
 
+// ===============================
+// NODE LABELS
+// ===============================
+
 const (
 	NodeAttackerIP     = "AttackerIP"
 	NodeServer         = "Server"
@@ -10,6 +14,10 @@ const (
 	NodeAlert          = "Alert"
 	NodeResponseAction = "ResponseAction"
 )
+
+// ===============================
+// RELATIONSHIP TYPES
+// ===============================
 
 const (
 	RelAttacked    = "ATTACKED"
@@ -20,11 +28,19 @@ const (
 	RelMitigatedBy = "MITIGATED_BY"
 )
 
+// ===============================
+// GRAPH NODE (INTERNAL)
+// ===============================
+
 type GraphNode struct {
 	Label      string                 `json:"label"`
 	Key        string                 `json:"key"`
 	Properties map[string]interface{} `json:"properties"`
 }
+
+// ===============================
+// GRAPH RELATIONSHIP (INTERNAL)
+// ===============================
 
 type GraphRelationship struct {
 	Type       string                 `json:"type"`
@@ -35,7 +51,13 @@ type GraphRelationship struct {
 	Properties map[string]interface{} `json:"properties"`
 }
 
+// ===============================
+// ATTACK GRAPH RECORD (INGESTION)
+// ===============================
+
 type AttackGraphRecord struct {
+	TenantID string `json:"tenant_id,omitempty"` // ✅ MULTI-TENANT SUPPORT
+
 	AlertID        string    `json:"alert_id"`
 	Timestamp      time.Time `json:"timestamp"`
 	SourceIP       string    `json:"source_ip"`
@@ -47,7 +69,16 @@ type AttackGraphRecord struct {
 	Severity       string    `json:"severity"`
 	ThreatScore    float64   `json:"threat_score"`
 	ResponseAction string    `json:"response_action,omitempty"`
+
+	// MITRE INTELLIGENCE
+	MitreTactic      string `json:"mitre_tactic"`
+	MitreTechnique   string `json:"mitre_technique"`
+	MitreTechniqueID string `json:"mitre_technique_id"`
 }
+
+// ===============================
+// GRAPH VIEW (API OUTPUT)
+// ===============================
 
 type GraphNodeView struct {
 	Label      string                 `json:"label"`

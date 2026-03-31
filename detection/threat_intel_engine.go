@@ -1,8 +1,10 @@
 package detection
 
 import (
-	"sentinelx/models"
+	"fmt"
 	"time"
+
+	"sentinelx/models"
 )
 
 type ThreatIntelEngine struct{}
@@ -18,13 +20,16 @@ var maliciousIPs = map[string]string{
 
 // ProcessEvent checks whether the source IP matches known threat intelligence.
 func (t *ThreatIntelEngine) ProcessEvent(event models.SecurityEvent) *models.Alert {
+
 	reason, exists := maliciousIPs[event.SourceIP]
 	if !exists {
 		return nil
 	}
 
+	// ✅ CREATE ALERT WITH TENANT
 	alert := models.Alert{
 		ID:          generateAlertID(),
+		TenantID:    event.TenantID, // 🔥 FIXED
 		Timestamp:   time.Now().UTC(),
 		Type:        "threat_intel_match",
 		Severity:    models.SeverityCritical,
@@ -37,6 +42,9 @@ func (t *ThreatIntelEngine) ProcessEvent(event models.SecurityEvent) *models.Ale
 			"reason":     reason,
 		},
 	}
+
+	// ✅ DEBUG (OPTIONAL)
+	fmt.Println("DEBUG ALERT TENANT:", alert.TenantID)
 
 	return &alert
 }

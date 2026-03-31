@@ -37,6 +37,24 @@ func HandleConnections(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	clients[ws] = true
 	mu.Unlock()
+
+	// ✅ SEND INITIAL MESSAGE (VERY IMPORTANT)
+	ws.WriteMessage(websocket.TextMessage, []byte(`{"type":"connected"}`))
+
+	// 🔥 KEEP CONNECTION ALIVE
+	for {
+		_, _, err := ws.ReadMessage()
+		if err != nil {
+			fmt.Println("DEBUG: client disconnected")
+
+			mu.Lock()
+			delete(clients, ws)
+			mu.Unlock()
+
+			ws.Close()
+			break
+		}
+	}
 }
 
 // BroadcastAlert sends the full alert object to all connected clients.

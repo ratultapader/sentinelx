@@ -1,9 +1,9 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"sentinelx/storage"
 	"sentinelx/ui"
@@ -20,13 +20,26 @@ func NewGraphHandler(graphStore *storage.Neo4jGraphStore) *GraphHandler {
 }
 
 func (h *GraphHandler) GetGraphBySourceIP(w http.ResponseWriter, r *http.Request) {
-	sourceIP := r.URL.Query().Get("source_ip")
+
+	ctx := r.Context()
+
+	// 🔥 FIX: GET IP FROM PATH (NOT QUERY)
+	sourceIP := strings.TrimPrefix(r.URL.Path, "/api/graph/")
+	sourceIP = strings.TrimSpace(sourceIP)
+
 	if sourceIP == "" {
 		http.Error(w, "missing source_ip", http.StatusBadRequest)
 		return
 	}
 
-	graph, err := h.graphStore.ExportGraphBySourceIP(context.Background(), sourceIP)
+	// ✅ TENANT ENFORCEMENT
+	tenantID := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
+	if tenantID == "" {
+		http.Error(w, "missing tenant id", http.StatusBadRequest)
+		return
+	}
+
+	graph, err := h.graphStore.ExportGraphBySourceIP(ctx, sourceIP, tenantID)
 	if err != nil {
 		http.Error(w, "failed to fetch graph", http.StatusInternalServerError)
 		return
@@ -61,8 +74,10 @@ func (h *GraphHandler) GetGraphBySourceIP(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(dto)
+	json.NewEncoder(w).Encode(dto)
 }
+
+// ================= HELPERS =================
 
 func graphNodeName(n storage.GraphNodeView) string {
 	if v, ok := n.Properties["name"].(string); ok && v != "" {

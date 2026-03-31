@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"time"
+	"context"
 
 	"sentinelx/models"
 )
@@ -34,12 +35,15 @@ func SaveEvent(event models.SecurityEvent) {
 		return
 	}
 
-	IndexSecurityEventDoc(map[string]interface{}{
-		"id":         event.EventID,
-		"timestamp":  time.Unix(0, event.Timestamp).UTC(),
-		"event_type": event.EventType,
-		"source_ip":  event.SourceIP,
-		"protocol":   event.Protocol,
-		"metadata":   event.Metadata,
-	}, event.EventID)
+	doc := map[string]interface{}{
+	"id":         event.EventID,
+	"tenant_id":  event.TenantID, // ✅ ADD THIS LINE
+	"timestamp":  time.Unix(0, event.Timestamp).UTC(),
+	"event_type": event.EventType,
+	"source_ip":  event.SourceIP,
+	"protocol":   event.Protocol,
+	"metadata":   event.Metadata,
+}
+
+IndexSecurityEventDoc(context.Background(), doc, event.EventID)
 }

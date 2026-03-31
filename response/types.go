@@ -21,6 +21,7 @@ type Action struct {
 	ActionType  string                 `json:"action_type"`
 	SourceIP    string                 `json:"source_ip,omitempty"`
 	Target      string                 `json:"target,omitempty"`
+	TenantID string `json:"tenant_id"` // ✅ ADD
 	Severity    string                 `json:"severity"`
 	ThreatScore float64                `json:"threat_score"`
 	Reason      string                 `json:"reason"`

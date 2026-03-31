@@ -23,18 +23,23 @@ func InitResponseEngine(size int) {
 
 func ProcessAlert(alert models.Alert) {
 	action := Decide(alert)
+	action.TenantID = alert.TenantID
 
 	if storage.GraphIngestor != nil {
 		err := storage.GraphIngestor.IngestAttackRecord(context.Background(), storage.AttackGraphRecord{
-			AlertID:        alert.ID,
-			Timestamp:      alert.Timestamp,
-			SourceIP:       alert.SourceIP,
-			Server:         alert.Target,
-			APIEndpoint:    alert.Target,
-			EventType:      alert.Type,
-			Severity:       alert.Severity,
-			ThreatScore:    alert.ThreatScore,
-			ResponseAction: action.ActionType,
+			TenantID:         alert.TenantID,
+			AlertID:          alert.ID,
+			Timestamp:        alert.Timestamp,
+			SourceIP:         alert.SourceIP,
+			Server:           alert.Target,
+			APIEndpoint:      alert.Target,
+			EventType:        alert.Type,
+			Severity:         alert.Severity,
+			ThreatScore:      alert.ThreatScore,
+			ResponseAction:   action.ActionType,
+			MitreTactic:      fmt.Sprintf("%v", alert.Metadata["mitre_tactic"]),
+			MitreTechnique:   fmt.Sprintf("%v", alert.Metadata["mitre_technique"]),
+			MitreTechniqueID: fmt.Sprintf("%v", alert.Metadata["mitre_technique_id"]),
 		})
 		if err != nil {
 			fmt.Println("WARNING: Neo4j graph ingest failed:", err)
@@ -46,7 +51,7 @@ func ProcessAlert(alert models.Alert) {
 	select {
 	case ActionQueue <- action:
 	default:
-		fmt.Println("Response action queue full — dropping action")
+		fmt.Println("Response action queue full - dropping action")
 	}
 }
 
@@ -56,29 +61,28 @@ func StartActionProcessor() {
 	go func() {
 		for action := range ActionQueue {
 			switch action.ActionType {
+			case ActionAlertOnly:
+				fmt.Println("ALERT ONLY -> no action needed")
 			case ActionIPBlock:
 				select {
 				case FirewallActionQueue <- action:
 				default:
-					fmt.Println("Firewall action queue full — dropping action")
+					fmt.Println("Firewall action queue full - dropping action")
 				}
-
 			case ActionRateLimit:
 				select {
 				case RateLimitActionQueue <- action:
 				default:
-					fmt.Println("Rate-limit action queue full — dropping action")
+					fmt.Println("Rate-limit action queue full - dropping action")
 				}
-
 			case ActionContainerRestart, ActionK8sIsolation:
 				select {
 				case KubernetesActionQueue <- action:
 				default:
-					fmt.Println("Kubernetes action queue full — dropping action")
+					fmt.Println("Kubernetes action queue full - dropping action")
 				}
-
 			default:
-				fmt.Println("No executor mapped for action type:", action.ActionType)
+				fmt.Println("Unknown action:", action.ActionType)
 			}
 		}
 	}()
@@ -98,7 +102,9 @@ func logResponseAction(action Action) {
 	fmt.Println("Timestamp:", action.Timestamp)
 	fmt.Println("===================================")
 
-	storage.IndexResponseActionDoc(map[string]interface{}{
+	ctx := context.Background()
+
+	storage.IndexResponseActionDoc(ctx, map[string]interface{}{
 		"id":           action.ID,
 		"alert_id":     action.AlertID,
 		"timestamp":    action.Timestamp,
@@ -110,5 +116,8 @@ func logResponseAction(action Action) {
 		"reason":       action.Reason,
 		"status":       action.Status,
 		"metadata":     action.Metadata,
+		"tenant_id":    action.TenantID,
 	}, action.ID)
 }
+
+

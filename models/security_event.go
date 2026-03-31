@@ -8,15 +8,16 @@ import (
 )
 
 type SecurityEvent struct {
-	EventID     string            `json:"event_id"`
-	Timestamp   int64             `json:"timestamp"`
-	EventType   string            `json:"event_type"`
-	SourceIP    string            `json:"source_ip"`
-	SourcePort  int               `json:"source_port,omitempty"`
-	DestPort    int               `json:"dest_port,omitempty"`
-	Protocol    string            `json:"protocol"`
-	PayloadSize int               `json:"payload_size,omitempty"`
-	Metadata    map[string]string `json:"metadata"`
+	EventID     string                 `json:"event_id"`
+	TenantID    string                 `json:"tenant_id"`
+	Timestamp   int64                  `json:"timestamp"`
+	EventType   string                 `json:"event_type"`
+	SourceIP    string                 `json:"source_ip"`
+	SourcePort  int                    `json:"source_port,omitempty"`
+	DestPort    int                    `json:"dest_port,omitempty"`
+	Protocol    string                 `json:"protocol"`
+	PayloadSize int                    `json:"payload_size,omitempty"`
+	Metadata    map[string]interface{} `json:"metadata"`
 }
 
 // Alert structure used across detection, storage, websocket, API, and incident handling.
@@ -31,6 +32,7 @@ type Alert struct {
 	ThreatScore float64                `json:"threat_score"`
 	Status      string                 `json:"status"`
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	TenantID    string                 `json:"tenant_id"`
 }
 
 const (
@@ -61,7 +63,7 @@ func NewSecurityEvent(eventType string) SecurityEvent {
 		EventID:   uuid.New().String(),
 		Timestamp: time.Now().UnixNano(),
 		EventType: eventType,
-		Metadata:  make(map[string]string),
+		Metadata:  make(map[string]interface{}),
 	}
 }
 

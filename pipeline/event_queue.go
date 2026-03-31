@@ -1,33 +1,54 @@
 package pipeline
 
 import (
+	"context"
 	"fmt"
+
+	// "sentinelx/detection"
 	"sentinelx/models"
+	"sentinelx/multi_tenant"
 )
 
 // Global event queue
 var EventQueue chan models.SecurityEvent
+
+// ===============================
+// INIT PIPELINE
+// ===============================
+func StartPipeline(handler func(models.SecurityEvent)) {
+	InitEventQueue(1000)
+	StartWorkerPool(5, handler)
+}
 
 // Initialize queue
 func InitEventQueue(size int) {
 	EventQueue = make(chan models.SecurityEvent, size)
 }
 
-// Publish event into queue
-func PublishEvent(event models.SecurityEvent) {
+// ===============================
+// PUBLISH EVENT
+// ===============================
+func PublishEvent(ctx context.Context, event models.SecurityEvent) {
+
+	tenantID := multi_tenant.TenantIDFromContext(ctx)
+
+	if tenantID == "" {
+		fmt.Println("missing tenant_id, dropping event")
+		return
+	}
+
+	event.TenantID = tenantID
 
 	select {
-
 	case EventQueue <- event:
-
 	default:
-		// queue full → drop event
 		fmt.Println("Event queue full, dropping event")
-
 	}
 }
 
-// Worker pool implementation
+// ===============================
+// WORKER POOL (FINAL FIX)
+// ===============================
 func StartWorkerPool(workerCount int, handler func(models.SecurityEvent)) {
 
 	for i := 0; i < workerCount; i++ {
@@ -36,13 +57,19 @@ func StartWorkerPool(workerCount int, handler func(models.SecurityEvent)) {
 
 			for event := range EventQueue {
 
-				fmt.Println("Worker", workerID, "processing event")
+				fmt.Println("DEBUG: pipeline worker received event")
+				fmt.Println("Worker", workerID, "processing event (tenant:", event.TenantID, ")")
 
+				// ✅ KEEP YOUR WAF (as you requested)
+				// alert := detection.WAF.ProcessEvent(event)
+				// if alert != nil {
+				// 	fmt.Println("🚨 ALERT TRIGGERED:", alert.Type, alert.SourceIP)
+				// }
+
+				// 🔥 ADD THIS (CRITICAL FIX)
 				handler(event)
-
 			}
 
 		}(i)
-
 	}
 }

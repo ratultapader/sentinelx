@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+	"context"
 
 	"sentinelx/models"
 	"sentinelx/pipeline"
@@ -62,7 +63,8 @@ func StartContainerMonitor() {
 			}
 
 			// Send event to pipeline
-			pipeline.PublishEvent(event)
+			ctx := context.Background()
+pipeline.PublishEvent(ctx, event)
 		}
 
 		time.Sleep(10 * time.Second)

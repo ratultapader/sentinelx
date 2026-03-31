@@ -1,10 +1,111 @@
 rules:
+
+  # ===============================
+  # 🔥 HTTP ABUSE / SCANNING
+  # ===============================
   - name: repeated_http_requests
     event_type: http_request
     threshold: 5
+    severity: MEDIUM
+
+  - name: aggressive_scanning
+    event_type: http_request
+    threshold: 20
     severity: HIGH
 
+  # ===============================
+  # 🔥 SQL INJECTION
+  # ===============================
+  - name: sql_injection_detected
+    event_type: SQL Injection
+    threshold: 1
+    severity: HIGH
+
+  - name: sql_injection_burst
+    event_type: SQL Injection
+    threshold: 3
+    severity: CRITICAL
+
+  # ===============================
+  # 🔥 XSS ATTACK
+  # ===============================
+  - name: xss_detected
+    event_type: XSS
+    threshold: 1
+    severity: MEDIUM
+
+  - name: xss_multiple_attempts
+    event_type: XSS
+    threshold: 5
+    severity: HIGH
+
+  # ===============================
+  # 🔥 PATH TRAVERSAL
+  # ===============================
+  - name: path_traversal_detected
+    event_type: Path Traversal
+    threshold: 1
+    severity: HIGH
+
+  # ===============================
+  # 🔥 REMOTE CODE EXECUTION
+  # ===============================
+  - name: rce_detected
+    event_type: RCE
+    threshold: 1
+    severity: CRITICAL
+
+  # ===============================
+  # 🔥 BRUTE FORCE
+  # ===============================
+  - name: brute_force_login
+    event_type: Brute Force
+    threshold: 5
+    severity: HIGH
+
+  - name: credential_stuffing
+    event_type: Brute Force
+    threshold: 10
+    severity: CRITICAL
+
+  # ===============================
+  # 🔥 DATA EXFILTRATION
+  # ===============================
+  - name: data_exfiltration_detected
+    event_type: Data Exfiltration
+    threshold: 1
+    severity: CRITICAL
+
+  # ===============================
+  # 🔥 ADMIN ACCESS
+  # ===============================
   - name: admin_access_watch
     event_type: admin_login
     threshold: 1
-    severity: CRITICAL
+    severity: HIGH
+
+  # ===============================
+  # 🔥 PORT SCAN / RECON
+  # ===============================
+  - name: port_scan_detected
+    event_type: Scan
+    threshold: 3
+    severity: MEDIUM
+
+  - name: reconnaissance_activity
+    event_type: Scan
+    threshold: 10
+    severity: HIGH
+
+  # ===============================
+  # 🔥 GENERIC SUSPICIOUS BEHAVIOR
+  # ===============================
+  - name: anomaly_behavior
+    event_type: anomaly
+    threshold: 3
+    severity: MEDIUM
+
+  - name: high_risk_anomaly
+    event_type: anomaly
+    threshold: 7
+    severity: HIGH

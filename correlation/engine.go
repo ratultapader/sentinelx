@@ -98,7 +98,7 @@ func DetectMultiStage(ip string) bool {
 }
 
 // BuildMultiStageAlert creates a standardized multi-stage attack alert.
-func BuildMultiStageAlert(ip string) *models.Alert {
+func BuildMultiStageAlert(ip string, tenantID string) *models.Alert {
 	mu.Lock()
 	record, exists := attackCache[ip]
 	if !exists {
@@ -112,6 +112,7 @@ func BuildMultiStageAlert(ip string) *models.Alert {
 
 	alert := models.Alert{
 		ID:          generateCorrelationAlertID(),
+		TenantID: tenantID,
 		Timestamp:   time.Now().UTC(),
 		Type:        "multi_stage_attack",
 		Severity:    models.SeverityCritical,

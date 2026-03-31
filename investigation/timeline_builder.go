@@ -14,11 +14,36 @@ func NewBuilder() *Builder {
 }
 
 func (b *Builder) Build(sourceIP string, events []TimelineEvent) AttackTimeline {
+	fmt.Println("?? TIMELINE BUILDER CALLED")
 	filtered := make([]TimelineEvent, 0, len(events))
+
 	for _, ev := range events {
-		if ev.SourceIP == sourceIP {
+
+		// if no sourceIP -> take all
+		if sourceIP == "" {
+			filtered = append(filtered, ev)
+			continue
+		}
+
+		// normalize values
+		evIP := strings.TrimSpace(ev.SourceIP)
+		reqIP := strings.TrimSpace(sourceIP)
+
+		// if empty -> include
+		if evIP == "" || reqIP == "" {
+			filtered = append(filtered, ev)
+			continue
+		}
+
+		// match
+		if evIP == reqIP || strings.Contains(evIP, reqIP) || strings.Contains(reqIP, evIP) {
 			filtered = append(filtered, ev)
 		}
+	}
+
+	// fallback if nothing matched
+	if len(filtered) == 0 {
+		filtered = events
 	}
 
 	sort.Slice(filtered, func(i, j int) bool {
@@ -30,6 +55,11 @@ func (b *Builder) Build(sourceIP string, events []TimelineEvent) AttackTimeline 
 		EventCount: len(filtered),
 		Events:     filtered,
 	}
+
+	// ✅ ADD THIS LINE
+if len(filtered) > 0 {
+	timeline.TenantID = filtered[0].TenantID
+}
 
 	if len(filtered) == 0 {
 		timeline.Conclusion = "no events found for source ip"
@@ -191,23 +221,36 @@ func buildRecommendations(events []TimelineEvent, attackType, riskLevel string) 
 }
 
 func NormalizeAlert(doc map[string]interface{}) TimelineEvent {
-	return TimelineEvent{
+	event := TimelineEvent{
 		ID:          getString(doc, "id"),
+		TenantID:    getString(doc, "tenant_id"), // ? ADD HERE
 		Timestamp:   getTime(doc, "timestamp"),
 		SourceIP:    getString(doc, "source_ip"),
-		EventType:   firstNonEmpty(getString(doc, "event_type"), getString(doc, "type")),
+		EventType:   getString(doc, "event_type"),
 		Severity:    getString(doc, "severity"),
 		ThreatScore: getFloat(doc, "threat_score"),
-		Stage:       inferStage(firstNonEmpty(getString(doc, "event_type"), getString(doc, "type")), "alert"),
-		Source:      "alert",
-		Summary:     firstNonEmpty(getString(doc, "description"), getString(doc, "event_type"), getString(doc, "type")),
-		Raw:         doc,
-	}
-}
 
+		// ?? ADD THIS (MITRE)
+		MitreTactic:      getString(doc, "mitre_tactic"),
+		MitreTechnique:   getString(doc, "mitre_technique"),
+		MitreTechniqueID: getString(doc, "mitre_technique_id"),
+
+		Stage:   "detection",
+		Source:  "alert",
+		Summary: getString(doc, "type"),
+		Raw:     doc,
+	}
+
+	fmt.Println("DEBUG >>> ALERT:", doc)
+	fmt.Println("DEBUG >>> EVENT TYPE:", getString(doc, "event_type"))
+	fmt.Println("DEBUG >>> BUILD EVENT:", event)
+
+	return event
+}
 func NormalizeSecurityEvent(doc map[string]interface{}) TimelineEvent {
 	return TimelineEvent{
 		ID:          firstNonEmpty(getString(doc, "id"), getString(doc, "event_id")),
+		TenantID:    getString(doc, "tenant_id"), // ✅ ADD HERE
 		Timestamp:   getTime(doc, "timestamp"),
 		SourceIP:    getString(doc, "source_ip"),
 		EventType:   getString(doc, "event_type"),
@@ -223,6 +266,7 @@ func NormalizeSecurityEvent(doc map[string]interface{}) TimelineEvent {
 func NormalizeResponseAction(doc map[string]interface{}) TimelineEvent {
 	return TimelineEvent{
 		ID:          getString(doc, "id"),
+		TenantID:    getString(doc, "tenant_id"), // ✅ ADD HERE
 		Timestamp:   getTime(doc, "timestamp"),
 		SourceIP:    getString(doc, "source_ip"),
 		EventType:   getString(doc, "action_type"),
@@ -238,6 +282,7 @@ func NormalizeResponseAction(doc map[string]interface{}) TimelineEvent {
 func NormalizeResponseResult(doc map[string]interface{}) TimelineEvent {
 	return TimelineEvent{
 		ID:          getString(doc, "id"),
+			TenantID:    getString(doc, "tenant_id"), // ✅ ADD HERE
 		Timestamp:   getTime(doc, "timestamp"),
 		SourceIP:    getString(doc, "source_ip"),
 		EventType:   firstNonEmpty(getString(doc, "event"), getString(doc, "action_type")),

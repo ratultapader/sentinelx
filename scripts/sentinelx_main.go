@@ -1,10 +1,13 @@
 package main
 
 import (
+    "context"
 	"fmt"
 	"time"
+	"sync"
 
 	"sentinelx/api"
+	"sentinelx/app"
 	"sentinelx/collector"
 	"sentinelx/correlation"
 	"sentinelx/detection"
@@ -16,6 +19,7 @@ import (
 	"sentinelx/storage"
 	"sentinelx/threatfeed"
 	"sentinelx/threatintel"
+	"sentinelx/configs"
 )
 
 const (
@@ -24,32 +28,46 @@ const (
 	WorkerCount    = 5
 )
 
+var alertCache = make(map[string]*models.Alert)
+var alertCacheMutex sync.Mutex
+
 func main() {
 	fmt.Println("Starting SentinelX Security Platform")
 
-	// Load threat intelligence feed
+	// ✅ BOOTSTRAP (FINAL FIX)
+	deps := app.Bootstrap()
+	_ = deps
+
+	cfg := configs.Load()
+
+	// ===============================
+	// THREAT INTEL
+	// ===============================
 	err := threatintel.LoadThreatFeed("data/malicious_ips.txt")
 	if err != nil {
 		panic(err)
 	}
 
-	// Initialize logger
+	// ===============================
+	// LOGGER + DB
+	// ===============================
 	fmt.Println("Initializing event logger...")
 	err = storage.InitLogger("logs/security_events.json")
 	if err != nil {
 		panic(err)
 	}
 
-	// Initialize database
 	err = storage.InitDB()
 	if err != nil {
 		panic(err)
 	}
 
-	// Initialize Elasticsearch forensic store
+	// ===============================
+	// ELASTICSEARCH (CONFIG-DRIVEN)
+	// ===============================
 	err = storage.InitElasticsearch(storage.ElasticsearchConfig{
 		Enabled:   true,
-		Addresses: []string{"http://localhost:9200"},
+		Addresses: []string{cfg.ElasticsearchURL},
 		Username:  "",
 		Password:  "",
 	})
@@ -59,30 +77,43 @@ func main() {
 		fmt.Println("Elasticsearch forensic store initialized")
 	}
 
-	// Initialize Neo4j graph engine
-	storage.InitNeo4jGraph("neo4j://localhost:7687", "neo4j", "password", "neo4j")
+	// ===============================
+	// NEO4J (CONFIG-DRIVEN)
+	// ===============================
+	storage.InitNeo4jGraph(
+		cfg.Neo4jURI,
+		cfg.Neo4jUsername,
+		cfg.Neo4jPassword,
+		"neo4j",
+	)
 	defer storage.CloseNeo4jGraph()
 
-	// Load detection rules
+	// ===============================
+	// RULE ENGINE
+	// ===============================
 	fmt.Println("Loading detection rules...")
 	err = ruleengine.LoadRules()
 	if err != nil {
 		panic(err)
 	}
 
-	// Initialize central alert engine
+	// ===============================
+	// ALERT ENGINE
+	// ===============================
 	fmt.Println("Initializing alert engine...")
 	detection.InitAlertEngine(AlertQueueSize)
 	go detection.StartAlertProcessor()
 
-	// Initialize response engine
+	// ===============================
+	// RESPONSE ENGINE
+	// ===============================
 	fmt.Println("Initializing response engine...")
 	response.InitResponseEngine(1000)
 	go response.StartActionProcessor()
 
 	fmt.Println("Initializing firewall executor...")
 	response.InitFirewallExecutor(1000)
-	blocker := response.NewFirewallBlocker(true) // true = simulate mode
+	blocker := response.NewFirewallBlocker(true)
 	response.StartFirewallExecutor(blocker)
 
 	fmt.Println("Initializing rate limit executor...")
@@ -95,29 +126,33 @@ func main() {
 	k8sController := response.NewKubernetesController(true)
 	response.StartKubernetesExecutor(k8sController)
 
-	// Start threat feed updater
+	// ===============================
+	// THREAT FEED
+	// ===============================
 	fmt.Println("Starting threat feed updater...")
 	threatfeed.StartThreatFeedUpdater()
 
-	// temporary test only
 	threatfeed.AddTestIP("::1")
 	fmt.Println("Threat feed indicators loaded:", threatfeed.Count())
 
-	// Initialize event pipeline
+	// ===============================
+	// PIPELINE
+	// ===============================
 	fmt.Println("Initializing event pipeline...")
 	pipeline.InitEventQueue(EventQueueSize)
 
-	// Start worker pool
 	fmt.Println("Starting worker pool...")
 	pipeline.StartWorkerPool(WorkerCount, processEvent)
 
-	// Start metrics reporter
+	// ===============================
+	// METRICS
+	// ===============================
 	go metrics.StartMetricsReporter()
 
-	// Start HTTP collector
+	// ===============================
+	// SERVERS
+	// ===============================
 	go collector.StartHTTPServer()
-
-	// Start API server
 	go api.StartAPIServer()
 
 	fmt.Println("SentinelX running")
@@ -125,114 +160,164 @@ func main() {
 	select {}
 }
 
+// ===============================
+// EVENT PROCESSOR (UNCHANGED)
+// ===============================
+
 func processEvent(event models.SecurityEvent) {
-	// Save raw event
-	storage.SaveEvent(event)
 
-	// Metrics
-	metrics.RecordEvent(event.SourceIP, event.EventType)
+    ctx := context.Background()
 
-	// Correlation tracking
-	correlation.RecordEvent(event.SourceIP, event.EventType)
+    fmt.Println("DEBUG: processEvent CALLED")
 
-	eventTime := time.Unix(0, event.Timestamp).UTC()
+    storage.SaveEvent(event)
+    correlation.RecordEvent(event.SourceIP, event.EventType)
 
-	// External threat feed check
-	if threatfeed.IsMalicious(event.SourceIP) {
-		alert := models.Alert{
-			ID:          generateMainAlertID(),
-			Timestamp:   eventTime,
-			Type:        "threat_intel_match",
-			Severity:    models.SeverityCritical,
-			SourceIP:    event.SourceIP,
-			Description: "Source IP matched external threat intelligence feed",
-			ThreatScore: 0.98,
-			Status:      models.AlertStatusNew,
-			Metadata: map[string]interface{}{
-				"matched_ip": event.SourceIP,
-				"source":     "external_threat_feed",
-			},
-		}
+    eventTime := time.Unix(0, event.Timestamp).UTC()
 
-		select {
-		case detection.AlertQueue <- alert:
-		default:
-			fmt.Println("Alert queue full — dropping external threat intel alert")
-		}
-	}
+    if threatfeed.IsMalicious(event.SourceIP) {
+        alert := models.Alert{
+            ID:          generateMainAlertID(),
+            TenantID:    event.TenantID,
+            Timestamp:   eventTime,
+            Type:        "threat_intel_match",
+            Severity:    models.SeverityCritical,
+            SourceIP:    event.SourceIP,
+            Description: "Source IP matched external threat intelligence feed",
+            ThreatScore: 0.98,
+            Status:      models.AlertStatusNew,
+            Metadata: map[string]interface{}{
+                "matched_ip": event.SourceIP,
+                "source":     "external_threat_feed",
+            },
+        }
 
-	// Correlation-based multi-stage detection
-	if correlation.DetectMultiStage(event.SourceIP) {
-		if alert := correlation.BuildMultiStageAlert(event.SourceIP); alert != nil {
-			select {
-			case detection.AlertQueue <- *alert:
-			default:
-				fmt.Println("Alert queue full — dropping multi-stage alert")
-			}
-		}
-	}
+        select {
+        case detection.AlertQueue <- alert:
+            metrics.RecordAlert(alert.Type)
+            storage.SaveAlert(ctx, alert)
+        default:
+            fmt.Println("Alert queue full — dropping alert")
+        }
+    }
 
-	// Local threat intel engine
-	if threatintel.IsMaliciousIP(event.SourceIP) {
-		alert := models.Alert{
-			ID:          generateMainAlertID(),
-			Timestamp:   eventTime,
-			Type:        "threat_intel_match",
-			Severity:    models.SeverityCritical,
-			SourceIP:    event.SourceIP,
-			Description: "Connection from known malicious IP",
-			ThreatScore: 0.98,
-			Status:      models.AlertStatusNew,
-			Metadata: map[string]interface{}{
-				"matched_ip": event.SourceIP,
-				"source":     "local_threat_intel",
-			},
-		}
+    if correlation.DetectMultiStage(event.SourceIP) {
+        if alert := correlation.BuildMultiStageAlert(event.SourceIP, event.TenantID); alert != nil {
+            select {
+            case detection.AlertQueue <- *alert:
+                metrics.RecordAlert(alert.Type)
+                storage.SaveAlert(ctx, *alert)
+            default:
+                fmt.Println("Alert queue full — dropping alert")
+            }
+        }
+    }
 
-		select {
-		case detection.AlertQueue <- alert:
-		default:
-			fmt.Println("Alert queue full — dropping local threat intel alert")
-		}
-	}
+    if threatintel.IsMaliciousIP(event.SourceIP) {
+        alert := models.Alert{
+            ID:          generateMainAlertID(),
+            TenantID:    event.TenantID,
+            Timestamp:   eventTime,
+            Type:        "threat_intel_match",
+            Severity:    models.SeverityCritical,
+            SourceIP:    event.SourceIP,
+            Description: "Connection from known malicious IP",
+            ThreatScore: 0.98,
+            Status:      models.AlertStatusNew,
+            Metadata: map[string]interface{}{
+                "matched_ip": event.SourceIP,
+                "source":     "local_threat_intel",
+            },
+        }
 
-	// Rule engine processing
-	if alert := ruleengine.ProcessEvent(event); alert != nil {
-		select {
-		case detection.AlertQueue <- *alert:
-		default:
-			fmt.Println("Alert queue full — dropping rule-engine alert")
-		}
-	}
+        select {
+        case detection.AlertQueue <- alert:
+            metrics.RecordAlert(alert.Type)
+            storage.SaveAlert(ctx, alert)
+        default:
+            fmt.Println("Alert queue full — dropping alert")
+        }
+    }
 
-	// Port scan detector
-	if alert := detection.ScanDetector.ProcessEvent(event); alert != nil {
-		select {
-		case detection.AlertQueue <- *alert:
-		default:
-			fmt.Println("Alert queue full — dropping port-scan alert")
-		}
-	}
+    ruleAlert := ruleengine.ProcessEvent(event)
+    if ruleAlert != nil {
+        select {
+        case detection.AlertQueue <- *ruleAlert:
+            metrics.RecordAlert(ruleAlert.Type)
+            storage.SaveAlert(ctx, *ruleAlert)
+        default:
+            fmt.Println("Alert queue full — dropping alert")
+        }
+    }
 
-	// WAF detector
-	if alert := detection.WAF.ProcessEvent(event); alert != nil {
-		select {
-		case detection.AlertQueue <- *alert:
-		default:
-			fmt.Println("Alert queue full — dropping WAF alert")
-		}
-	}
+    detected := event.EventType
+    if ruleAlert != nil {
+        if v, ok := ruleAlert.Metadata["detected_type"].(string); ok {
+            detected = v
+        }
+    }
 
-	// Threat intel detector
-	if alert := detection.ThreatIntel.ProcessEvent(event); alert != nil {
-		select {
-		case detection.AlertQueue <- *alert:
-		default:
-			fmt.Println("Alert queue full — dropping detector threat-intel alert")
-		}
-	}
+    metrics.RecordEvent(event.SourceIP, event.EventType, detected)
+
+    if alert := detection.ScanDetector.ProcessEvent(event); alert != nil {
+
+        // skip SQLi (handled by WAF)
+        if alert.Type == "sql_injection" {
+            return
+        }
+
+        select {
+        case detection.AlertQueue <- *alert:
+            metrics.RecordAlert(alert.Type)
+            storage.SaveAlert(ctx, *alert)
+        default:
+            fmt.Println("Alert queue full � dropping alert")
+        }
+    }
+
+    if alert := detection.WAF.ProcessEvent(event); alert != nil {
+
+        key := event.SourceIP + "_" + alert.Type
+
+        // if already exists -> increase count
+        if existing, ok := alertCache[key]; ok {
+
+            if existing.Metadata == nil {
+                existing.Metadata = make(map[string]interface{})
+            }
+
+            count, _ := existing.Metadata["count"].(int)
+            existing.Metadata["count"] = count + 1
+
+            return
+        }
+
+        // first time alert
+        alert.Metadata["count"] = 1
+        alertCache[key] = alert
+
+        select {
+        case detection.AlertQueue <- *alert:
+            metrics.RecordAlert(alert.Type)
+            storage.SaveAlert(ctx, *alert)
+        default:
+            fmt.Println("Alert queue full — dropping alert")
+        }
+    }
+
+    if alert := detection.ThreatIntel.ProcessEvent(event); alert != nil {
+        select {
+        case detection.AlertQueue <- *alert:
+            metrics.RecordAlert(alert.Type)
+            storage.SaveAlert(ctx, *alert)
+        default:
+            fmt.Println("Alert queue full — dropping alert")
+        }
+    }
 }
+
 
 func generateMainAlertID() string {
 	return fmt.Sprintf("ALT-%d", time.Now().UnixNano())
 }
+

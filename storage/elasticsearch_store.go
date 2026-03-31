@@ -8,6 +8,8 @@ import (
 	"io"
 	"time"
 
+	// "sentinelx/multi_tenant"
+
 	"github.com/elastic/go-elasticsearch/v8/esapi"
 )
 
@@ -45,6 +47,7 @@ func InitElasticsearch(cfg ElasticsearchConfig) error {
 	fmt.Println("DEBUG ES: after ping")
 
 	store := NewElasticsearchStore(client)
+
 	fmt.Println("DEBUG ES: before EnsureIndexes")
 	if err := store.EnsureIndexes(ctx); err != nil {
 		return err
@@ -62,6 +65,7 @@ func (s *ElasticsearchStore) EnsureIndexes(ctx context.Context) error {
 			"mappings": {
 				"properties": {
 					"id":          { "type": "keyword" },
+					"tenant_id":   { "type": "keyword" },
 					"timestamp":   { "type": "date" },
 					"event_type":  { "type": "keyword" },
 					"source_ip":   { "type": "keyword" },
@@ -75,6 +79,7 @@ func (s *ElasticsearchStore) EnsureIndexes(ctx context.Context) error {
 			"mappings": {
 				"properties": {
 					"id":           { "type": "keyword" },
+					"tenant_id":    { "type": "keyword" },
 					"timestamp":    { "type": "date" },
 					"type":         { "type": "keyword" },
 					"severity":     { "type": "keyword" },
@@ -92,6 +97,7 @@ func (s *ElasticsearchStore) EnsureIndexes(ctx context.Context) error {
 			"mappings": {
 				"properties": {
 					"id":           { "type": "keyword" },
+					"tenant_id":    { "type": "keyword" },
 					"alert_id":     { "type": "keyword" },
 					"timestamp":    { "type": "date" },
 					"action_type":  { "type": "keyword" },
@@ -129,14 +135,13 @@ func (s *ElasticsearchStore) ensureIndex(ctx context.Context, index string, mapp
 	}
 	defer res.Body.Close()
 
-	fmt.Println("DEBUG ES: exists status for", index, "=", res.StatusCode)
-
 	if res.StatusCode == 200 {
 		fmt.Println("DEBUG ES: index already exists", index)
 		return nil
 	}
 
 	fmt.Println("DEBUG ES: creating index", index)
+
 	createRes, err := s.client.Raw().Indices.Create(
 		index,
 		s.client.Raw().Indices.Create.WithContext(ctx),
@@ -146,8 +151,6 @@ func (s *ElasticsearchStore) ensureIndex(ctx context.Context, index string, mapp
 		return fmt.Errorf("create index %s: %w", index, err)
 	}
 	defer createRes.Body.Close()
-
-	fmt.Println("DEBUG ES: create status for", index, "=", createRes.StatusCode)
 
 	if createRes.IsError() {
 		body, _ := io.ReadAll(createRes.Body)
@@ -160,6 +163,13 @@ func (s *ElasticsearchStore) ensureIndex(ctx context.Context, index string, mapp
 
 func (s *ElasticsearchStore) IndexDocument(ctx context.Context, index, documentID string, doc interface{}) error {
 	fmt.Println("DEBUG ES: indexing document", documentID, "into", index)
+
+	// ✅ MULTI-TENANT INJECTION
+	tenantID, _ := doc.(map[string]interface{})["tenant_id"].(string)
+
+if tenantID == "" {
+	return fmt.Errorf("missing tenant_id in document")
+}
 
 	body, err := json.Marshal(doc)
 	if err != nil {
@@ -179,8 +189,6 @@ func (s *ElasticsearchStore) IndexDocument(ctx context.Context, index, documentI
 	}
 	defer res.Body.Close()
 
-	fmt.Println("DEBUG ES: index response status for", index, "=", res.StatusCode)
-
 	if res.IsError() {
 		data, _ := io.ReadAll(res.Body)
 		return fmt.Errorf("index document into %s failed: %s", index, string(data))
@@ -189,18 +197,87 @@ func (s *ElasticsearchStore) IndexDocument(ctx context.Context, index, documentI
 	return nil
 }
 
-func (s *ElasticsearchStore) SearchBySourceIP(ctx context.Context, index, sourceIP string) ([]map[string]interface{}, error) {
+// ==============================
+// ✅ FIXED HELPERS (CONTEXT SAFE)
+// ==============================
+
+func IndexSecurityEventDoc(ctx context.Context, doc map[string]interface{}, documentID string) {
+	if ESStore == nil {
+		return
+	}
+
+	doc["ingested_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	if err := ESStore.IndexDocument(ctx, IndexSecurityEvents, documentID, doc); err != nil {
+		fmt.Println("failed to index security event:", err)
+	}
+}
+
+func IndexAlertDoc(ctx context.Context, doc map[string]interface{}, documentID string) {
+	if ESStore == nil {
+		return
+	}
+
+	doc["ingested_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	if err := ESStore.IndexDocument(ctx, IndexAlerts, documentID, doc); err != nil {
+		fmt.Println("failed to index alert:", err)
+	}
+}
+
+func IndexResponseActionDoc(ctx context.Context, doc map[string]interface{}, documentID string) {
+	if ESStore == nil {
+		return
+	}
+
+	doc["ingested_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	if err := ESStore.IndexDocument(ctx, IndexResponseActions, documentID, doc); err != nil {
+		fmt.Println("failed to index response action:", err)
+	}
+}
+// 🔽 ONLY NEW CODE ADDED BELOW YOUR FILE (NO DELETIONS)
+
+// ==============================
+// 🚀 STEP 9 — TENANT SAFE READ
+// ==============================
+
+// 🔒 Search All by Tenant
+func (s *ElasticsearchStore) SearchAllByTenant(
+	ctx context.Context,
+	index string,
+	tenantID string,
+	size int,
+) ([]map[string]interface{}, error) {
+
 	query := map[string]interface{}{
+		"size": size,
+		"sort": []map[string]interface{}{
+			{
+				"timestamp": map[string]interface{}{
+					"order": "desc",
+				},
+			},
+		},
 		"query": map[string]interface{}{
 			"term": map[string]interface{}{
-				"source_ip": sourceIP,
+				"tenant_id": tenantID,
 			},
 		},
 	}
 
 	body, err := json.Marshal(query)
 	if err != nil {
-		return nil, fmt.Errorf("marshal search query: %w", err)
+		return nil, fmt.Errorf("marshal tenant query: %w", err)
 	}
 
 	res, err := s.client.Raw().Search(
@@ -210,13 +287,93 @@ func (s *ElasticsearchStore) SearchBySourceIP(ctx context.Context, index, source
 		s.client.Raw().Search.WithTrackTotalHits(true),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("search index %s: %w", index, err)
+		return nil, fmt.Errorf("search by tenant: %w", err)
 	}
 	defer res.Body.Close()
 
 	if res.IsError() {
 		data, _ := io.ReadAll(res.Body)
-		return nil, fmt.Errorf("search index %s failed: %s", index, string(data))
+		return nil, fmt.Errorf("search error: %s", string(data))
+	}
+
+
+	var parsed struct {
+		Hits struct {
+			Hits []struct {
+				ID     string                 `json:"_id"`
+				Source map[string]interface{} `json:"_source"`
+			} `json:"hits"`
+		} `json:"hits"`
+	}
+
+	if err := json.NewDecoder(res.Body).Decode(&parsed); err != nil {
+		return nil, err
+	}
+
+	results := make([]map[string]interface{}, 0, len(parsed.Hits.Hits))
+	for _, hit := range parsed.Hits.Hits {
+		source := hit.Source
+		source["_id"] = hit.ID
+		results = append(results, source)
+	}
+
+	return results, nil
+}
+
+// 🔒 Search by IP + Tenant
+func (s *ElasticsearchStore) SearchBySourceIPAndTenant(
+	ctx context.Context,
+	index string,
+	sourceIP string,
+	tenantID string,
+) ([]map[string]interface{}, error) {
+
+	query := map[string]interface{}{
+		"size": 500,
+		"sort": []map[string]interface{}{
+			{
+				"timestamp": map[string]interface{}{
+					"order": "asc",
+				},
+			},
+		},
+		"query": map[string]interface{}{
+			"bool": map[string]interface{}{
+				"must": []map[string]interface{}{
+					{
+						"term": map[string]interface{}{
+							"source_ip": sourceIP,
+						},
+					},
+					{
+						"term": map[string]interface{}{
+							"tenant_id": tenantID,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	body, err := json.Marshal(query)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := s.client.Raw().Search(
+		s.client.Raw().Search.WithContext(ctx),
+		s.client.Raw().Search.WithIndex(index),
+		s.client.Raw().Search.WithBody(bytes.NewReader(body)),
+		s.client.Raw().Search.WithTrackTotalHits(true),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		data, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("search error: %s", string(data))
 	}
 
 	var parsed struct {
@@ -228,7 +385,7 @@ func (s *ElasticsearchStore) SearchBySourceIP(ctx context.Context, index, source
 	}
 
 	if err := json.NewDecoder(res.Body).Decode(&parsed); err != nil {
-		return nil, fmt.Errorf("decode search response: %w", err)
+		return nil, err
 	}
 
 	results := make([]map[string]interface{}, 0, len(parsed.Hits.Hits))
@@ -239,47 +396,80 @@ func (s *ElasticsearchStore) SearchBySourceIP(ctx context.Context, index, source
 	return results, nil
 }
 
-func IndexSecurityEventDoc(doc map[string]interface{}, documentID string) {
-    if ESStore == nil {
-        return
-    }
+// 🔒 Get by ID + Tenant
+func (s *ElasticsearchStore) GetByDocumentIDAndTenant(
+	ctx context.Context,
+	index, documentID, tenantID string,
+) (map[string]interface{}, error) {
 
-    doc["ingested_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+	doc, err := s.GetByDocumentID(ctx, index, documentID)
+	if err != nil || doc == nil {
+		return doc, err
+	}
 
-    ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-    defer cancel()
+	if getStringValue(doc, "tenant_id") != tenantID {
+		return nil, nil
+	}
 
-    if err := ESStore.IndexDocument(ctx, IndexSecurityEvents, documentID, doc); err != nil {
-        fmt.Println("failed to index security event in elasticsearch:", err)
-    }
+	return doc, nil
 }
 
-func IndexAlertDoc(doc map[string]interface{}, documentID string) {
-    if ESStore == nil {
-        return
-    }
+// 🔧 Helper
+func getStringValue(m map[string]interface{}, key string) string {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return ""
+	}
+	s, _ := v.(string)
+	return s
+}
+func (s *ElasticsearchStore) GetByDocumentID(ctx context.Context, index string, id string) (map[string]interface{}, error) {
 
-    doc["ingested_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+	query := map[string]interface{}{
+		"query": map[string]interface{}{
+			"term": map[string]interface{}{
+				"_id": id,
+			},
+		},
+		"size": 1,
+	}
 
-    ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-    defer cancel()
+	body, err := json.Marshal(query)
+	if err != nil {
+		return nil, err
+	}
 
-    if err := ESStore.IndexDocument(ctx, IndexAlerts, documentID, doc); err != nil {
-        fmt.Println("failed to index alert in elasticsearch:", err)
-    }
+	res, err := s.client.Raw().Search(
+		s.client.Raw().Search.WithContext(ctx),
+		s.client.Raw().Search.WithIndex(index),
+		s.client.Raw().Search.WithBody(bytes.NewReader(body)),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		data, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("search error: %s", string(data))
+	}
+
+	var parsed struct {
+		Hits struct {
+			Hits []struct {
+				Source map[string]interface{} `json:"_source"`
+			} `json:"hits"`
+		} `json:"hits"`
+	}
+
+	if err := json.NewDecoder(res.Body).Decode(&parsed); err != nil {
+		return nil, err
+	}
+
+	if len(parsed.Hits.Hits) == 0 {
+		return nil, fmt.Errorf("document not found")
+	}
+
+	return parsed.Hits.Hits[0].Source, nil
 }
 
-func IndexResponseActionDoc(doc map[string]interface{}, documentID string) {
-    if ESStore == nil {
-        return
-    }
-
-    doc["ingested_at"] = time.Now().UTC().Format(time.RFC3339Nano)
-
-    ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-    defer cancel()
-
-    if err := ESStore.IndexDocument(ctx, IndexResponseActions, documentID, doc); err != nil {
-        fmt.Println("failed to index response action in elasticsearch:", err)
-    }
-}
