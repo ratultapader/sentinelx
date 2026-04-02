@@ -25,7 +25,10 @@ api.interceptors.response.use(
   }
 );
 
-// 🔥 Helpers
+// ==============================
+// 🔥 EXISTING HELPERS (NO CHANGE)
+// ==============================
+
 export const get = async (url) => {
   const res = await api.get(url);
   return res.data;
@@ -39,6 +42,18 @@ export const post = async (url, body) => {
 export const postNoBody = async (url) => {
   const res = await api.post(url);
   return res.data;
+};
+
+// ==============================
+// 🚀 DAY 64 ADDITION (SAFE)
+// ==============================
+
+// 👉 Use this ONLY when API returns { count, items }
+export const getItems = async (url) => {
+  const data = await get(url);
+
+  if (data?.items) return data.items; // incidents case
+  return data; // alerts case (array)
 };
 
 export default api;

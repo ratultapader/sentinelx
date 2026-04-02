@@ -1,77 +1,85 @@
 import React, { useEffect, useState } from "react";
-import api from "../services/api";
 
 export default function TimelineView({ ip }) {
   const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!ip) return;
 
-    api.get(`/api/timeline/${ip}`, {
+    setLoading(true);
+
+    fetch(`http://localhost:9090/api/timeline/${ip}`, {
       headers: { "X-Tenant-ID": "t1" }
     })
-    .then(res => {
-      const data = res.data;
+      .then(res => res.json())
+      .then(data => {
+        console.log("TIMELINE:", data);
 
-      const merged = [
-        ...(data.alerts || []),
-        ...(data.events || []),
-        ...(data.actions || [])
-      ];
-
-      merged.sort((a, b) =>
-        new Date(a.timestamp) - new Date(b.timestamp)
-      );
-
-      setEvents(merged);
-    })
-    .catch(() => setEvents([]));
+        // ✅ FIX: handle new array format
+        if (Array.isArray(data)) {
+          setEvents(data);
+        } else {
+          setEvents([]);
+        }
+      })
+      .catch(err => {
+        console.error("Timeline error:", err);
+        setEvents([]);
+      })
+      .finally(() => setLoading(false));
 
   }, [ip]);
 
+  if (loading) return <p style={styles.muted}>Loading timeline...</p>;
+
+  if (!events.length) {
+    return <p style={styles.muted}>No timeline data</p>;
+  }
+
   return (
-    <div>
-      {events.length > 0 ? (
-        events.map((e, i) => (
-          <div key={i} style={styles.event}>
-            
-            <div style={styles.time}>
-              {formatTime(e.timestamp)}
-            </div>
-
-            <div style={styles.content}>
-              <strong>{e.type || "event"}</strong>
-              <p>{e.destination || e.source_ip}</p>
-            </div>
-
-          </div>
-        ))
-      ) : (
-        <p>No timeline data</p>
-      )}
+    <div style={styles.container}>
+      {events.map((e, i) => (
+        <div key={i} style={styles.event}>
+          <span style={styles.time}>{formatTime(e.timestamp)}</span>
+          <span style={styles.arrow}>→</span>
+          <span style={styles.type}>{e.type}</span>
+        </div>
+      ))}
     </div>
   );
 }
 
+// 🔥 FORMAT TIME
 function formatTime(ts) {
-  return ts ? new Date(ts).toLocaleTimeString() : "";
+  return new Date(ts).toLocaleTimeString();
 }
 
 const styles = {
-  event: {
+  container: {
     display: "flex",
-    marginBottom: "10px",
+    flexDirection: "column",
+    gap: "6px"
+  },
+  event: {
     background: "#1e293b",
-    padding: "10px",
-    borderRadius: "8px"
+    padding: "8px",
+    borderRadius: "6px",
+    display: "flex",
+    alignItems: "center"
   },
   time: {
-    width: "80px",
-    fontSize: "12px",
-    color: "#94a3b8"
+    color: "#38bdf8",
+    marginRight: "8px",
+    fontSize: "12px"
   },
-  content: {
-    marginLeft: "10px",
+  arrow: {
+    marginRight: "8px"
+  },
+  type: {
     color: "#e2e8f0"
+  },
+  muted: {
+    color: "#94a3b8"
   }
 };

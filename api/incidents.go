@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sort"
 
 	"sentinelx/incident"
 	"sentinelx/storage"
@@ -178,13 +179,54 @@ func (h *IncidentHandler) GetTimelineByIP(w http.ResponseWriter, r *http.Request
 	events, _ := h.esStore.SearchBySourceIPAndTenant(ctx, storage.IndexSecurityEvents, ip, tenantID)
 	actions, _ := h.esStore.SearchBySourceIPAndTenant(ctx, storage.IndexResponseActions, ip, tenantID)
 
-	response := map[string]interface{}{
-		"alerts":  alerts,
-		"events":  events,
-		"actions": actions,
-	}
+	timeline := []map[string]interface{}{}
 
-	writeJSON(w, 200, response)
+// 🔹 EVENTS
+for _, e := range events {
+	timestamp := getString(e, "timestamp")
+	eventType := getString(e, "event_type")
+
+	if timestamp != "" {
+		timeline = append(timeline, map[string]interface{}{
+			"type":      eventType,
+			"timestamp": timestamp,
+		})
+	}
+}
+
+// 🔹 ALERTS
+for _, a := range alerts {
+	timestamp := getString(a, "timestamp")
+	alertType := getString(a, "type")
+
+	if timestamp != "" {
+		timeline = append(timeline, map[string]interface{}{
+			"type":      alertType,
+			"timestamp": timestamp,
+		})
+	}
+}
+
+// 🔹 ACTIONS
+for _, ac := range actions {
+	timestamp := getString(ac, "timestamp")
+	actionType := getString(ac, "action_type")
+
+	if timestamp != "" {
+		timeline = append(timeline, map[string]interface{}{
+			"type":      actionType,
+			"timestamp": timestamp,
+		})
+	}
+}
+
+// 🔥 SORT BY TIME (STRING SORT SAFE FOR ISO TIME)
+sort.Slice(timeline, func(i, j int) bool {
+	return timeline[i]["timestamp"].(string) < timeline[j]["timestamp"].(string)
+})
+
+// 🔥 FINAL RESPONSE (ONLY TIMELINE)
+writeJSON(w, 200, timeline)
 }
 
 // ================= GET /graph/:ip =================

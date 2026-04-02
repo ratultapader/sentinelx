@@ -2,6 +2,7 @@ import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import TenantBadge from "./TenantBadge";
 import TenantSelector from "./TenantSelector"; // ✅ ADD
+import ThemeToggle from "./ThemeToggle";
 
 export default function Layout({ children }) {
   const location = useLocation();
@@ -36,6 +37,14 @@ export default function Layout({ children }) {
           <MenuLink to="/reports" active={location.pathname === "/reports"}>Reports</MenuLink>
           <MenuLink to="/system" active={location.pathname === "/system"}>System</MenuLink>
 
+          <MenuLink to="/admin" active={location.pathname === "/admin"}>
+  🛡 Admin
+</MenuLink>
+
+          <MenuLink to="/kpi" active={location.pathname === "/kpi"}>
+  📊 KPI Dashboard
+</MenuLink>
+
           <MenuLink to="/rules" active={location.pathname === "/rules"}>
   Rules
 </MenuLink>
@@ -47,9 +56,13 @@ export default function Layout({ children }) {
         
         {/* 🔥 HEADER */}
         <div style={styles.header}>
-          <TenantSelector />
-          <TenantBadge />
-        </div>
+  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+    <ThemeToggle />   {/* 🔥 ADD THIS */}
+    <TenantSelector />
+  </div>
+
+  <TenantBadge />
+</div>
 
         {/* 🔥 CONTENT */}
         <div style={styles.content} className="fade-in">

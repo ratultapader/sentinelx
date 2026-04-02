@@ -33,7 +33,8 @@ export default function AlertInsights() {
         reasons={data.reasons}
       />
 
-      <AttackStory story={data.story} />
+      {/* 🔥 FIXED HERE */}
+      <AttackStory steps={data.story_steps || []} />
     </div>
   );
 }

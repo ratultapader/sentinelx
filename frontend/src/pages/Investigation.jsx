@@ -38,7 +38,7 @@ export default function Investigation() {
         if (!res.ok) throw new Error("Failed to load attack pattern");
         return res.json();
       })
-      .then(data => setAttackSteps(data || []))
+      .then(data => setAttackSteps(Array.isArray(data) ? data : []))
       .catch(err => {
         console.error("AttackPattern error:", err);
         setError("Failed to load attack pattern");
@@ -63,7 +63,6 @@ export default function Investigation() {
           <span style={styles.ip}>{ip}</span>
         </div>
 
-        {/* 🔥 STATUS BADGE */}
         <div style={styles.status}>
           {loading ? "⏳ Loading..." : "🟢 Active"}
         </div>
@@ -74,7 +73,6 @@ export default function Investigation() {
         <h3 style={styles.title}>⚔️ Attack Pattern</h3>
 
         {loading && <p style={styles.muted}>Loading attack pattern...</p>}
-
         {error && <p style={styles.error}>{error}</p>}
 
         {!loading && !error && attackSteps.length === 0 && (
@@ -92,6 +90,8 @@ export default function Investigation() {
         {/* LEFT: TIMELINE */}
         <div style={styles.left}>
           <h3 style={styles.title}>📜 Timeline</h3>
+
+          {/* ✅ FIX: Timeline now handled inside component */}
           <TimelineView ip={ip} />
         </div>
 
@@ -107,7 +107,7 @@ export default function Investigation() {
 }
 
 // ===============================
-// 🎨 STYLES (PRO LEVEL)
+// 🎨 STYLES
 // ===============================
 const styles = {
   container: {

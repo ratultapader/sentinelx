@@ -6,7 +6,6 @@ export default function AlertDetails({ alert }) {
   const [notes, setNotes] = useState([]);
   const [saving, setSaving] = useState(false);
 
-  // ✅ Sync state when new alert selected
   useEffect(() => {
     if (alert) {
       setStatus(alert.status || "NEW");
@@ -53,7 +52,6 @@ export default function AlertDetails({ alert }) {
 
       if (!res.ok) throw new Error("Update failed");
 
-      // ✅ instant UI update
       if (note.trim()) {
         setNotes(prev => [...prev, note]);
         setNote("");
@@ -77,8 +75,19 @@ export default function AlertDetails({ alert }) {
       <p><strong>Type:</strong> {alert.type || alert.event_type}</p>
       <p><strong>Source IP:</strong> {alert.source_ip}</p>
 
+      {/* 🔥 NEW: THREAT SCORE */}
+      <h3 style={{ color: "#ef4444", marginTop: "10px" }}>
+        🔥 Threat Score: {alert.threat_score}
+      </h3>
+
+      {/* 🔥 NEW: SCORING BARS */}
+      {renderBar("Anomaly Detection", alert.anomaly_score)}
+      {renderBar("Signature Match", alert.signature_score)}
+      {renderBar("IP Reputation", alert.ip_reputation)}
+      {renderBar("Behavior Analysis", alert.behavior_score)}
+
       {/* 🔥 STATUS */}
-      <div style={{ marginTop: "10px" }}>
+      <div style={{ marginTop: "15px" }}>
         <strong>Status: </strong>
 
         <select
@@ -98,7 +107,7 @@ export default function AlertDetails({ alert }) {
         </select>
       </div>
 
-      {/* 🔥 NOTES INPUT */}
+      {/* NOTES INPUT */}
       <div style={{ marginTop: "15px" }}>
         <strong>Notes:</strong>
 
@@ -110,7 +119,7 @@ export default function AlertDetails({ alert }) {
         />
       </div>
 
-      {/* 🔥 SAVE */}
+      {/* SAVE */}
       <button
         onClick={saveUpdate}
         disabled={saving}
@@ -119,7 +128,7 @@ export default function AlertDetails({ alert }) {
         {saving ? "Saving..." : "💾 Save"}
       </button>
 
-      {/* 🔥 PREVIOUS NOTES */}
+      {/* PREVIOUS NOTES */}
       {notes.length > 0 && (
         <div style={{ marginTop: "15px" }}>
           <strong>Previous Notes:</strong>
@@ -134,6 +143,29 @@ export default function AlertDetails({ alert }) {
     </div>
   );
 }
+
+//////////////////////////////////////////////////////
+// 🔥 SCORING BAR COMPONENT
+//////////////////////////////////////////////////////
+
+function renderBar(label, value) {
+  return (
+    <div style={{ marginTop: "10px" }}>
+      <p>{label} ({value || 0})</p>
+
+      <div style={styles.barBg}>
+        <div
+          style={{
+            ...styles.barFill,
+            width: `${(value || 0) * 100}%`
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+//////////////////////////////////////////////////////
 
 const styles = {
   card: {
@@ -166,5 +198,18 @@ const styles = {
     marginTop: "5px",
     padding: "6px",
     borderRadius: "5px"
+  },
+
+  // 🔥 NEW
+  barBg: {
+    height: "8px",
+    background: "#374151",
+    borderRadius: "5px"
+  },
+  barFill: {
+    height: "100%",
+    background: "#3b82f6",
+    borderRadius: "5px",
+    transition: "width 0.4s ease"
   }
 };

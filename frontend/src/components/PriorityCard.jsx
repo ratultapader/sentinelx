@@ -9,13 +9,21 @@ export default function PriorityCard({ score, reasons = [] }) {
 
   return (
     <div style={{ ...styles.card, background: bg }}>
+      
       <h3>🔥 Priority Score: {score}/100</h3>
 
-      <ul>
+      <h4 style={{ marginTop: "10px" }}>
+        Why this alert is critical:
+      </h4>
+
+      <ul style={{ marginTop: "8px", paddingLeft: "18px" }}>
         {reasons.map((r, i) => (
-          <li key={i}>{r}</li>
+          <li key={i} style={{ marginBottom: "6px" }}>
+            ✔ {r}
+          </li>
         ))}
       </ul>
+
     </div>
   );
 }

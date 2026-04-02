@@ -6,7 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	"sentinelx/storage"
+	// "sentinelx/storage"
+	"sentinelx/detection"
 )
 
 //////////////////////////////////////////////////////
@@ -14,13 +15,9 @@ import (
 //////////////////////////////////////////////////////
 
 func AlertsHandler(w http.ResponseWriter, r *http.Request) {
-	severity := r.URL.Query().Get("severity")
+	// severity := r.URL.Query().Get("severity")
 
-	alerts, err := storage.GetAlerts(severity)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	alerts := detection.GetRecentAlerts()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(alerts)

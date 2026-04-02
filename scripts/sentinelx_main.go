@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 	"sync"
+	"math/rand"
 
 	"sentinelx/api"
 	"sentinelx/app"
@@ -20,6 +21,8 @@ import (
 	"sentinelx/threatfeed"
 	"sentinelx/threatintel"
 	"sentinelx/configs"
+	"sentinelx/service"
+"sentinelx/repository"
 )
 
 const (
@@ -135,6 +138,11 @@ func main() {
 	threatfeed.AddTestIP("::1")
 	fmt.Println("Threat feed indicators loaded:", threatfeed.Count())
 
+
+	// 🔥 CLEAN ARCHITECTURE (NEW)
+alertRepo := repository.NewAlertRepository()
+alertService := service.NewAlertService(alertRepo)
+
 	// ===============================
 	// PIPELINE
 	// ===============================
@@ -142,7 +150,9 @@ func main() {
 	pipeline.InitEventQueue(EventQueueSize)
 
 	fmt.Println("Starting worker pool...")
-	pipeline.StartWorkerPool(WorkerCount, processEvent)
+	pipeline.StartWorkerPool(WorkerCount, func(event models.SecurityEvent) {
+	processEvent(event, alertService)
+})
 
 	// ===============================
 	// METRICS
@@ -164,7 +174,7 @@ func main() {
 // EVENT PROCESSOR (UNCHANGED)
 // ===============================
 
-func processEvent(event models.SecurityEvent) {
+func processEvent(event models.SecurityEvent, alertService *service.AlertService) {
 
     ctx := context.Background()
 
@@ -195,7 +205,7 @@ func processEvent(event models.SecurityEvent) {
         select {
         case detection.AlertQueue <- alert:
             metrics.RecordAlert(alert.Type)
-            storage.SaveAlert(ctx, alert)
+           alertService.ProcessAlert(ctx, alert)
         default:
             fmt.Println("Alert queue full — dropping alert")
         }
@@ -206,7 +216,7 @@ func processEvent(event models.SecurityEvent) {
             select {
             case detection.AlertQueue <- *alert:
                 metrics.RecordAlert(alert.Type)
-                storage.SaveAlert(ctx, *alert)
+                alertService.ProcessAlert(ctx, *alert)
             default:
                 fmt.Println("Alert queue full — dropping alert")
             }
@@ -233,7 +243,7 @@ func processEvent(event models.SecurityEvent) {
         select {
         case detection.AlertQueue <- alert:
             metrics.RecordAlert(alert.Type)
-            storage.SaveAlert(ctx, alert)
+           alertService.ProcessAlert(ctx, alert)
         default:
             fmt.Println("Alert queue full — dropping alert")
         }
@@ -244,7 +254,7 @@ func processEvent(event models.SecurityEvent) {
         select {
         case detection.AlertQueue <- *ruleAlert:
             metrics.RecordAlert(ruleAlert.Type)
-            storage.SaveAlert(ctx, *ruleAlert)
+            alertService.ProcessAlert(ctx, *ruleAlert)
         default:
             fmt.Println("Alert queue full — dropping alert")
         }
@@ -269,7 +279,7 @@ func processEvent(event models.SecurityEvent) {
         select {
         case detection.AlertQueue <- *alert:
             metrics.RecordAlert(alert.Type)
-            storage.SaveAlert(ctx, *alert)
+            alertService.ProcessAlert(ctx, *alert)
         default:
             fmt.Println("Alert queue full � dropping alert")
         }
@@ -277,7 +287,12 @@ func processEvent(event models.SecurityEvent) {
 
     if alert := detection.WAF.ProcessEvent(event); alert != nil {
 
-        key := event.SourceIP + "_" + alert.Type
+		// 🔥 PREVENT DUPLICATE PROCESSING
+	if event.EventType == "sql_injection" {
+		return
+	}
+
+   key := event.SourceIP + "_" + alert.Type + "_" + fmt.Sprint(event.Timestamp)
 
         // if already exists -> increase count
         if existing, ok := alertCache[key]; ok {
@@ -299,7 +314,7 @@ func processEvent(event models.SecurityEvent) {
         select {
         case detection.AlertQueue <- *alert:
             metrics.RecordAlert(alert.Type)
-            storage.SaveAlert(ctx, *alert)
+            alertService.ProcessAlert(ctx, *alert)
         default:
             fmt.Println("Alert queue full — dropping alert")
         }
@@ -309,7 +324,7 @@ func processEvent(event models.SecurityEvent) {
         select {
         case detection.AlertQueue <- *alert:
             metrics.RecordAlert(alert.Type)
-            storage.SaveAlert(ctx, *alert)
+            alertService.ProcessAlert(ctx, *alert)
         default:
             fmt.Println("Alert queue full — dropping alert")
         }
@@ -318,6 +333,6 @@ func processEvent(event models.SecurityEvent) {
 
 
 func generateMainAlertID() string {
-	return fmt.Sprintf("ALT-%d", time.Now().UnixNano())
+	return fmt.Sprintf("ALT-%d-%d", time.Now().UnixNano(), rand.Intn(10000))
 }
 

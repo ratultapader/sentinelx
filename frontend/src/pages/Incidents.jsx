@@ -3,13 +3,15 @@ import { fetchIncidents } from "../services/dashboardApi";
 import IncidentTable from "../components/IncidentTable";
 import IncidentDetails from "../components/IncidentDetails";
 
+// 🔥 DAY 64 IMPORT
+import { exportToCSV, exportToJSON } from "../utils/export";
+
 export default function Incidents() {
   const [incidents, setIncidents] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // 🔥 keep selected id stable across refresh
   const selectedIdRef = useRef(null);
 
   const loadIncidents = async () => {
@@ -26,7 +28,7 @@ export default function Incidents() {
 
       setIncidents(items);
 
-      // 🔥 RESTORE SELECTION (PRODUCTION FIX)
+      // 🔥 restore selection
       if (selectedIdRef.current) {
         const found = items.find(i => i.id === selectedIdRef.current);
         if (found) {
@@ -35,7 +37,7 @@ export default function Incidents() {
         }
       }
 
-      // ✅ fallback: select first only if nothing selected
+      // ✅ fallback selection
       if (items.length > 0 && !selectedIdRef.current) {
         setSelected(items[0]);
         selectedIdRef.current = items[0].id;
@@ -50,7 +52,6 @@ export default function Incidents() {
     }
   };
 
-  // 🔥 track user selection
   const handleSelect = (incident) => {
     setSelected(incident);
     selectedIdRef.current = incident.id;
@@ -67,6 +68,17 @@ export default function Incidents() {
     <div style={{ padding: "20px", color: "white" }}>
       <h1>📂 Incidents Center</h1>
 
+      {/* 🔥 DAY 64 EXPORT BUTTONS */}
+      <div style={{ marginBottom: "15px" }}>
+        <button onClick={() => exportToCSV(incidents, "incidents.csv")}>
+          ⬇ Export CSV
+        </button>
+
+        <button onClick={() => exportToJSON(incidents, "incidents.json")}>
+          ⬇ Export JSON
+        </button>
+      </div>
+
       {loading && <p>Loading incidents...</p>}
       {error && <p style={{ color: "red" }}>{error}</p>}
 
@@ -74,7 +86,7 @@ export default function Incidents() {
         <>
           <IncidentTable
             incidents={incidents}
-            onSelect={handleSelect}   // 🔥 FIXED
+            onSelect={handleSelect}
           />
 
           {selected && (

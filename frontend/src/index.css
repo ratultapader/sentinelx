@@ -165,3 +165,13 @@ tr:hover {
     font-size: 22px;
   }
 }
+
+body.dark {
+  background: #020617;
+  color: #e2e8f0;
+}
+
+body.light {
+  background: #f1f5f9;
+  color: #020617;
+}

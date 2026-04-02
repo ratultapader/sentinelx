@@ -14,6 +14,10 @@ import Rules from "./pages/Rules";
 import Playbooks from "./pages/Playbooks";
 import AttackMap from "./pages/AttackMap";
 // import Investigation from "./pages/Investigation";
+import Admin from "./pages/Admin";
+
+import KPIDashboard from "./pages/KPIDashboard";
+
 
 // ✅ LAYOUT (IMPORTANT)
 import Layout from "./components/Layout";
@@ -63,6 +67,10 @@ export default function App() {
           <Route path="/attack-map" element={<AttackMap />} />
 
           <Route path="/investigation" element={<Investigation />} />
+
+          <Route path="/kpi" element={<KPIDashboard />} />
+
+          <Route path="/admin" element={<Admin />} />
 
         </Routes>
 

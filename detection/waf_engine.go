@@ -100,6 +100,14 @@ func (w *WAFEngine) ProcessEvent(event models.SecurityEvent) *models.Alert {
 		metadata["method"] = method
 	}
 
+	target := pathStr
+
+if target == "" {
+	if t, ok := event.Metadata["target"].(string); ok {
+		target = t
+	}
+}
+
 	// ===============================
 	// SQL INJECTION
 	// ===============================
@@ -111,7 +119,7 @@ func (w *WAFEngine) ProcessEvent(event models.SecurityEvent) *models.Alert {
 			Type:        "sql_injection",
 			Severity:    models.SeverityCritical,
 			SourceIP:    event.SourceIP,
-			Target:      pathStr,
+			Target: target,
 			Description: "SQL injection payload detected",
 			ThreatScore: 0.95,
 			Status:      models.AlertStatusNew,
@@ -130,7 +138,7 @@ func (w *WAFEngine) ProcessEvent(event models.SecurityEvent) *models.Alert {
 			Type:        "xss_attack",
 			Severity:    models.SeverityHigh,
 			SourceIP:    event.SourceIP,
-			Target:      pathStr,
+			Target: target,
 			Description: "Cross-site scripting payload detected",
 			ThreatScore: 0.80,
 			Status:      models.AlertStatusNew,
@@ -149,7 +157,7 @@ func (w *WAFEngine) ProcessEvent(event models.SecurityEvent) *models.Alert {
 			Type:        "dir_traversal",
 			Severity:    models.SeverityHigh,
 			SourceIP:    event.SourceIP,
-			Target:      pathStr,
+			Target: target,
 			Description: "Directory traversal payload detected",
 			ThreatScore: 0.85,
 			Status:      models.AlertStatusNew,

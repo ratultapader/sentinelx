@@ -41,6 +41,13 @@ if storage.GraphStore != nil {
 	mux.HandleFunc("/api/attack_path/", GetAttackPath)
 	mux.HandleFunc("/api/attack_pattern/", GetAttackPattern)
 
+	mux.HandleFunc("/api/kpi", KPIHandler)
+mux.HandleFunc("/api/threat_trend", ThreatTrendHandler)
+mux.HandleFunc("/api/feedback", FeedbackHandler)
+
+mux.HandleFunc("/api/audit_logs", AuditLogsHandler)
+mux.HandleFunc("/api/performance", PerformanceHandler)
+
 	// ===============================
 	// RULES
 	// ===============================
