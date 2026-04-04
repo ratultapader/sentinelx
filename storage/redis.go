@@ -10,9 +10,10 @@ import (
 
 var RDB *redis.Client
 
-func InitRedis() error {
+func InitRedis() {
 	url := os.Getenv("REDIS_URL")
 
+	// Default for Docker local
 	if url == "" {
 		url = "redis:6379"
 	}
@@ -21,12 +22,14 @@ func InitRedis() error {
 		Addr: url,
 	})
 
-	// test connection
+	// 🔥 Try connection
 	_, err := RDB.Ping(context.Background()).Result()
 	if err != nil {
-		return fmt.Errorf("redis connection failed: %w", err)
+		// ✅ DO NOT CRASH — make Redis optional
+		fmt.Println("⚠️ Redis not available, running without Redis:", err)
+		RDB = nil
+		return
 	}
 
 	fmt.Println("✅ Redis connected")
-	return nil
 }
