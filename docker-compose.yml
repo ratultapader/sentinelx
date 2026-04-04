@@ -1,0 +1,98 @@
+services:
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+    container_name: sentinelx-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200"]
+      interval: 10s
+      retries: 5
+      start_period: 20s
+
+  neo4j:
+    image: neo4j:5
+    container_name: sentinelx-neo4j
+    environment:
+      - NEO4J_AUTH=neo4j/password
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: sentinelx-redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: sentinelx-postgres
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=sentinelx
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  backend:
+    build: .
+    container_name: sentinelx-backend
+    ports:
+      - "9090:9090"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      neo4j:
+        condition: service_started
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_started
+    env_file:
+      - .env
+
+  frontend:
+    build: ./frontend
+    container_name: sentinelx-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+  # 🔥 NEW — PROMETHEUS
+  prometheus:
+    image: prom/prometheus
+    container_name: sentinelx-prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9091:9090"
+    depends_on:
+      - backend
+
+  # 🔥 NEW — GRAFANA
+  grafana:
+    image: grafana/grafana
+    container_name: sentinelx-grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  es_data:
+  neo4j_data:
+  pg_data:

@@ -21,7 +21,8 @@ export default function Incidents() {
       const data = await fetchIncidents();
       console.log("INCIDENT API RESPONSE:", data);
 
-      let items = Array.isArray(data?.items) ? data.items : [];
+     let items = Array.isArray(data?.items) ? data.items : [];
+items = items || [];
 
       // ✅ sort latest first
       items.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -33,12 +34,13 @@ export default function Incidents() {
         const found = items.find(i => i.id === selectedIdRef.current);
         if (found) {
           setSelected(found);
+           setLoading(false); // 🔥 IMPORTANT
           return;
         }
       }
 
       // ✅ fallback selection
-      if (items.length > 0 && !selectedIdRef.current) {
+      if ((items?.length || 0) > 0 && !selectedIdRef.current) {
         setSelected(items[0]);
         selectedIdRef.current = items[0].id;
       }

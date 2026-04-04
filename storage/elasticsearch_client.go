@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/elastic/go-elasticsearch/v8"
 )
@@ -11,11 +12,15 @@ type ElasticsearchClient struct {
 	client *elasticsearch.Client
 }
 
-func NewElasticsearchClient(cfg ElasticsearchConfig) (*ElasticsearchClient, error) {
+func NewElasticsearchClient() (*ElasticsearchClient, error) {
+
+	esURL := os.Getenv("ELASTICSEARCH_URL")
+	if esURL == "" {
+		return nil, fmt.Errorf("ELASTICSEARCH_URL not set")
+	}
+
 	es, err := elasticsearch.NewClient(elasticsearch.Config{
-		Addresses: cfg.Addresses,
-		Username:  cfg.Username,
-		Password:  cfg.Password,
+		Addresses: []string{esURL}, // ✅ from env
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create elasticsearch client: %w", err)

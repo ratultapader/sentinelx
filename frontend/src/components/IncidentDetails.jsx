@@ -21,10 +21,10 @@ export default function IncidentDetails({ incident }) {
       <p><strong>ID:</strong> {incident.id}</p>
       <p><strong>Severity:</strong> {incident.severity}</p>
       <p><strong>Status:</strong> {incident.status || "new"}</p>
-      <p><strong>Alert Count:</strong> {alerts.length}</p>
+      <p><strong>Alert Count:</strong> {alerts?.length || 0}</p>
 
       {/* 🔥 CASE 1: HAS ALERTS */}
-      {alerts.length > 0 ? (
+      {(alerts?.length || 0) > 0 ? (
         <>
           <h4>🌐 Related IPs</h4>
 

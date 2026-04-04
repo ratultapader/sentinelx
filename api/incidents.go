@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"sort"
+	"time"
 
 	"sentinelx/incident"
 	"sentinelx/storage"
@@ -46,6 +47,24 @@ func (h *IncidentHandler) GetIncidents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ===============================
+	// 🔥 REDIS CACHE KEY
+	// ===============================
+	cacheKey := "incidents:" + tenantID
+
+	// ===============================
+	// 🔥 STEP 1: CHECK CACHE
+	// ===============================
+	cached, err := storage.RDB.Get(ctx, cacheKey).Result()
+	if err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(cached))
+		return
+	}
+
+	// ===============================
+	// 🔥 STEP 2: FETCH FROM ES
+	// ===============================
 	alerts, err := h.esStore.SearchAllByTenant(ctx, storage.IndexAlerts, tenantID, 500)
 	if err != nil {
 		writeError(w, 500, "failed to fetch incidents")
@@ -98,12 +117,24 @@ func (h *IncidentHandler) GetIncidents(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	writeJSON(w, 200, map[string]interface{}{
+	response := map[string]interface{}{
 		"items": items,
 		"count": len(items),
-	})
-}
+	}
 
+	jsonData, _ := json.Marshal(response)
+
+	// ===============================
+	// 🔥 STEP 3: STORE IN REDIS
+	// ===============================
+	storage.RDB.Set(ctx, cacheKey, jsonData, 10*time.Second)
+
+	// ===============================
+	// 🔥 RETURN RESPONSE
+	// ===============================
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonData)
+}
 // ================= GET /incidents/:id =================
 
 func (h *IncidentHandler) GetIncidentByID(w http.ResponseWriter, r *http.Request) {

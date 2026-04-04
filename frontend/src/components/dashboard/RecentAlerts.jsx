@@ -21,7 +21,7 @@ function RecentAlerts({ alerts = [], summary }) {
     <div style={{ marginTop: "20px" }}>
       <h3>Recent Alerts</h3>
 
-      {alerts.length > 0 ? (
+      {(alerts?.length || 0) > 0 ? (
         alerts.map((alert, index) => (
           <div
             key={index}

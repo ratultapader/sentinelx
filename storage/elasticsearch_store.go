@@ -32,7 +32,7 @@ func InitElasticsearch(cfg ElasticsearchConfig) error {
 	}
 
 	fmt.Println("DEBUG ES: creating client")
-	client, err := NewElasticsearchClient(cfg)
+	client, err := NewElasticsearchClient()
 	if err != nil {
 		return err
 	}

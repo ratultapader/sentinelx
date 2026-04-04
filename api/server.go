@@ -5,34 +5,49 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"sentinelx/dashboard"
+	"sentinelx/service"
 	"sentinelx/storage"
 	"sentinelx/stream"
+	"sentinelx/configs"
 )
 
 // ===============================
 // START API SERVER
 // ===============================
-func StartAPIServer() {
+func StartAPIServer(alertService *service.AlertService) {
 	mux := http.NewServeMux()
+	alertHandler := NewAlertHandler(alertService)
 
 	// ===============================
-// GRAPH HANDLER INIT
-// ===============================
-if storage.GraphStore != nil {
-	graphHandler := NewGraphHandler(storage.GraphStore)
-	mux.HandleFunc("/api/graph/", graphHandler.GetGraphBySourceIP)
-}
+	// GRAPH HANDLER INIT
+	// ===============================
+	if storage.GraphStore != nil {
+		graphHandler := NewGraphHandler(storage.GraphStore)
+		mux.HandleFunc("/api/graph/", graphHandler.GetGraphBySourceIP)
+	}
 
 	// ===============================
 	// CORE APIs
 	// ===============================
-	mux.HandleFunc("/metrics", MetricsHandler)
+	// mux.HandleFunc("/metrics", MetricsHandler)
 	mux.HandleFunc("/top_attackers", TopAttackersHandler)
 	mux.HandleFunc("/health", HealthHandler)
 
 	mux.HandleFunc("/api/alerts/recent", GetRecentAlerts)
-	mux.HandleFunc("/api/alerts", GetRecentAlerts)
+	mux.HandleFunc("/api/alerts", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			alertHandler.CreateAlert(w, r)
+			return
+		}
+		if r.Method == "GET" {
+			GetRecentAlerts(w, r)
+			return
+		}
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	})
 	mux.HandleFunc("/api/alerts/", UpdateAlert)
 
 	mux.HandleFunc("/api/threat_intel", ThreatIntelHandler)
@@ -42,11 +57,12 @@ if storage.GraphStore != nil {
 	mux.HandleFunc("/api/attack_pattern/", GetAttackPattern)
 
 	mux.HandleFunc("/api/kpi", KPIHandler)
-mux.HandleFunc("/api/threat_trend", ThreatTrendHandler)
-mux.HandleFunc("/api/feedback", FeedbackHandler)
+	mux.HandleFunc("/api/threat_trend", ThreatTrendHandler)
+	mux.HandleFunc("/api/feedback", FeedbackHandler)
 
-mux.HandleFunc("/api/audit_logs", AuditLogsHandler)
-mux.HandleFunc("/api/performance", PerformanceHandler)
+	mux.HandleFunc("/api/audit_logs", AuditLogsHandler)
+	mux.HandleFunc("/api/performance", PerformanceHandler)
+	mux.Handle("/metrics", promhttp.Handler())
 
 	// ===============================
 	// RULES
@@ -141,12 +157,15 @@ mux.HandleFunc("/api/performance", PerformanceHandler)
 	handler := Chain(
 		mux,
 		RecoverMiddleware,
+		RequestIDMiddleware,
 		LoggingMiddleware,
 		CORSMiddleware,
 		TenantMiddleware,
 	)
 
-	fmt.Println("SentinelX API running on :9090")
+	configs.Log("INFO", "API server started", map[string]interface{}{
+	"port": "9090",
+})
 
 	err := http.ListenAndServe(":9090", handler)
 	if err != nil {

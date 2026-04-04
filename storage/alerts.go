@@ -10,7 +10,7 @@ import (
 )
 
 // SaveAlert stores a full alert record in the database.
-func SaveAlert(ctx context.Context, alert models.Alert) {
+func SaveAlert(ctx context.Context, alert models.Alert) error {
 	metadataJSON, err := json.Marshal(alert.Metadata)
 	if err != nil {
 		log.Println("failed to marshal alert metadata:", err)
@@ -50,7 +50,7 @@ func SaveAlert(ctx context.Context, alert models.Alert) {
 	)
 	if err != nil {
 		log.Println("failed to save alert:", err)
-		return
+		return err
 	}
 
 	fmt.Println("DEBUG STORAGE >>> TENANT IN ALERT:", alert.TenantID)
@@ -96,6 +96,8 @@ func SaveAlert(ctx context.Context, alert models.Alert) {
 
 		"metadata": meta,
 	}, alert.ID)
+	
+	return nil 
 }
 
 func GetRecentAlertsByTenant(ctx context.Context, tenantID string) ([]models.Alert, error) {

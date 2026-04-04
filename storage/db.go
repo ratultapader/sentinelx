@@ -17,12 +17,13 @@ func InitDB() error {
 		return err
 	}
 
-	fmt.Println("✅ Database connected")
+	fmt.Println("Database connected")
 
 	return createTables()
 }
 
 func createTables() error {
+
 	eventTable := `
 	CREATE TABLE IF NOT EXISTS events (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,6 +44,7 @@ func createTables() error {
 		description TEXT,
 		threat_score REAL,
 		status TEXT,
+		tenant_id TEXT,
 		metadata TEXT
 	);`
 
@@ -55,6 +57,8 @@ func createTables() error {
 	if err != nil {
 		return err
 	}
+
+	fmt.Println("Tables initialized")
 
 	return nil
 }

@@ -10,7 +10,7 @@ var GraphStore *Neo4jGraphStore
 var graphClient *Neo4jClient
 
 func InitNeo4jGraph(uri, username, password, database string) {
-	client, err := NewNeo4jClient(uri, username, password)
+	client, err := NewNeo4jClient()
 	if err != nil {
 		log.Printf("WARNING: Neo4j init failed: %v", err)
 		return

@@ -46,7 +46,7 @@ export default function Alerts() {
       setAlerts(normalized);
       setFiltered(normalized);
 
-      if (normalized.length > 0 && !userSelectedRef.current) {
+      if ((normalized?.length || 0) > 0 && !userSelectedRef.current) {
         setSelected(normalized[0]);
       }
 

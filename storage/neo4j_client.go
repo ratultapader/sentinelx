@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
@@ -11,7 +12,16 @@ type Neo4jClient struct {
 	driver neo4j.DriverWithContext
 }
 
-func NewNeo4jClient(uri, username, password string) (*Neo4jClient, error) {
+func NewNeo4jClient() (*Neo4jClient, error) {
+
+	uri := os.Getenv("NEO4J_URI")
+	username := os.Getenv("NEO4J_USERNAME")
+	password := os.Getenv("NEO4J_PASSWORD")
+
+	if uri == "" {
+		return nil, fmt.Errorf("NEO4J_URI not set")
+	}
+
 	driver, err := neo4j.NewDriverWithContext(
 		uri,
 		neo4j.BasicAuth(username, password, ""),

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	"sentinelx/configs" // ✅ ADD THIS
 	"sentinelx/models"
 	"sentinelx/repository"
 )
@@ -15,11 +16,22 @@ func NewAlertService(repo *repository.AlertRepository) *AlertService {
 	return &AlertService{Repo: repo}
 }
 
-// 🔥 TEMP SAFE VERSION
-func (s *AlertService) ProcessAlert(ctx context.Context, alert models.Alert) {
+// 🔥 FIXED VERSION
+func (s *AlertService) ProcessAlert(ctx context.Context, alert models.Alert) error {
 
-	// For now: directly save
-	// (we will plug detection later safely)
+	// ✅ ADD THIS (STEP 7)
+	configs.Log("INFO", "processing alert", map[string]interface{}{
+		"event_type": alert.Type,
+		"source_ip":  alert.SourceIP,
+		"tenant_id":  alert.TenantID,
+		"alert_id":   alert.ID,
+	})
 
-	s.Repo.Save(ctx, alert)
+	// save alert
+	err := s.Repo.Save(ctx, alert)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

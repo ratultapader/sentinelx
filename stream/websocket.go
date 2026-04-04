@@ -11,44 +11,55 @@ import (
 	"sentinelx/models"
 )
 
-// Store connected clients
+// ===============================
+// 🔥 GLOBAL CLIENT STORE
+// ===============================
 var clients = make(map[*websocket.Conn]bool)
-
-// Mutex for thread safety
 var mu sync.Mutex
 
-// WebSocket upgrader
+// ===============================
+// 🔥 WEBSOCKET UPGRADER
+// ===============================
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return true
+		return true // allow all (dev mode)
 	},
 }
 
-// Handle incoming WebSocket connections
+// ===============================
+// 🔥 HANDLE CONNECTIONS
+// ===============================
 func HandleConnections(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		fmt.Println("DEBUG: WebSocket upgrade failed:", err)
+		fmt.Println("❌ WebSocket upgrade failed:", err)
 		return
 	}
 
-	fmt.Println("DEBUG: new WebSocket client connected")
+	fmt.Println("🔌 New WebSocket client connected")
 
+	// add client
 	mu.Lock()
 	clients[ws] = true
+	fmt.Println("👥 Total clients:", len(clients))
 	mu.Unlock()
 
-	// ✅ SEND INITIAL MESSAGE (VERY IMPORTANT)
-	ws.WriteMessage(websocket.TextMessage, []byte(`{"type":"connected"}`))
+	// send initial message
+	err = ws.WriteMessage(websocket.TextMessage, []byte(`{"type":"connected"}`))
+	if err != nil {
+		ws.Close()
+		return
+	}
 
-	// 🔥 KEEP CONNECTION ALIVE
+	// keep connection alive
 	for {
 		_, _, err := ws.ReadMessage()
 		if err != nil {
-			fmt.Println("DEBUG: client disconnected")
+			fmt.Println("❌ Client disconnected")
 
 			mu.Lock()
 			delete(clients, ws)
+			fmt.Println("👥 Total clients:", len(clients))
 			mu.Unlock()
 
 			ws.Close()
@@ -57,23 +68,25 @@ func HandleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// BroadcastAlert sends the full alert object to all connected clients.
+// ===============================
+// 🔥 BROADCAST ALERT (REAL-TIME)
+// ===============================
 func BroadcastAlert(alert models.Alert) {
 	message, err := json.Marshal(alert)
 	if err != nil {
-		fmt.Println("DEBUG: failed to marshal alert:", err)
+		fmt.Println("❌ Failed to marshal alert:", err)
 		return
 	}
 
 	mu.Lock()
 	defer mu.Unlock()
 
-	fmt.Println("DEBUG: broadcasting to", len(clients), "clients")
+	fmt.Println("📡 Broadcasting alert to", len(clients), "clients")
 
 	for client := range clients {
 		err := client.WriteMessage(websocket.TextMessage, message)
 		if err != nil {
-			fmt.Println("DEBUG: removing disconnected client")
+			fmt.Println("⚠️ Removing disconnected client")
 			client.Close()
 			delete(clients, client)
 		}
