@@ -24,6 +24,8 @@ func NewAlertHandler(s *service.AlertService) *AlertHandler {
 func (h *AlertHandler) CreateAlert(w http.ResponseWriter, r *http.Request) {
 	var alert models.Alert
 
+	ctx := r.Context() // ✅ use request context
+
 	// ===============================
 	// 🔹 Decode request
 	// ===============================
@@ -49,8 +51,8 @@ func (h *AlertHandler) CreateAlert(w http.ResponseWriter, r *http.Request) {
 	// 🔥 BLOCK CHECK (SAFE)
 	// ===============================
 	if ip != "" && storage.RDB != nil {
-		val, _ := storage.RDB.Get(context.Background(), "blocked:"+ip).Result()
-		if val == "1" {
+		val, err := storage.RDB.Get(ctx, "blocked:"+ip).Result()
+		if err == nil && val == "1" {
 			log.Println("🚫 REJECTED BLOCKED IP:", ip)
 			configs.ErrorCount.Inc()
 			http.Error(w, "IP is blocked", http.StatusForbidden)
@@ -64,17 +66,19 @@ func (h *AlertHandler) CreateAlert(w http.ResponseWriter, r *http.Request) {
 	if ip != "" && storage.RDB != nil {
 		key := "rate_limit:" + ip
 
-		count, _ := storage.RDB.Incr(context.Background(), key).Result()
-		storage.RDB.Expire(context.Background(), key, 60*time.Second)
+		count, err := storage.RDB.Incr(ctx, key).Result()
+		if err == nil {
+			storage.RDB.Expire(ctx, key, 60*time.Second)
 
-		if count > 10 {
-			log.Println("🚫 BLOCKED IP:", ip)
+			if count > 10 {
+				log.Println("🚫 BLOCKED IP:", ip)
 
-			storage.RDB.Set(context.Background(), "blocked:"+ip, "1", 5*time.Minute)
+				storage.RDB.Set(ctx, "blocked:"+ip, "1", 5*time.Minute)
 
-			configs.ErrorCount.Inc()
-			http.Error(w, "IP blocked due to abuse", http.StatusTooManyRequests)
-			return
+				configs.ErrorCount.Inc()
+				http.Error(w, "IP blocked due to abuse", http.StatusTooManyRequests)
+				return
+			}
 		}
 	}
 
@@ -86,7 +90,7 @@ func (h *AlertHandler) CreateAlert(w http.ResponseWriter, r *http.Request) {
 	// ===============================
 	// 🔹 Process alert
 	// ===============================
-	err = h.Service.ProcessAlert(context.Background(), alert)
+	err = h.Service.ProcessAlert(ctx, alert)
 	if err != nil {
 		configs.ErrorCount.Inc()
 		log.Println("❌ PROCESS ERROR:", err)
@@ -101,7 +105,7 @@ func (h *AlertHandler) CreateAlert(w http.ResponseWriter, r *http.Request) {
 	// ===============================
 	if storage.RDB != nil {
 		cacheKey := "incidents:" + tenantID
-		err = storage.RDB.Del(context.Background(), cacheKey).Err()
+		err := storage.RDB.Del(ctx, cacheKey).Err()
 		if err != nil {
 			log.Println("⚠️ Failed to clear cache:", err)
 		} else {
@@ -113,13 +117,14 @@ func (h *AlertHandler) CreateAlert(w http.ResponseWriter, r *http.Request) {
 	// 🔥 REDIS PUB/SUB (SAFE)
 	// ===============================
 	if storage.RDB != nil {
-		eventData, _ := json.Marshal(alert)
-
-		err = storage.RDB.Publish(context.Background(), "alerts_channel", eventData).Err()
-		if err != nil {
-			log.Println("⚠️ Failed to publish alert:", err)
-		} else {
-			log.Println("📡 Alert published to Redis")
+		eventData, err := json.Marshal(alert)
+		if err == nil {
+			err = storage.RDB.Publish(ctx, "alerts_channel", eventData).Err()
+			if err != nil {
+				log.Println("⚠️ Failed to publish alert:", err)
+			} else {
+				log.Println("📡 Alert published to Redis")
+			}
 		}
 	}
 

@@ -12,6 +12,13 @@ import (
 func StartRedisSubscriber() {
 	ctx := context.Background()
 
+	// 🔥 FIX 1: Check Redis
+	if storage.RDB == nil {
+		log.Println("⚠️ Redis not available — subscriber disabled")
+		return
+	}
+
+	// 🔥 FIX 2: Safe subscribe
 	sub := storage.RDB.Subscribe(ctx, "alerts_channel")
 
 	ch := sub.Channel()
@@ -23,12 +30,13 @@ func StartRedisSubscriber() {
 
 		err := json.Unmarshal([]byte(msg.Payload), &alert)
 		if err != nil {
+			log.Println("⚠️ Failed to parse alert:", err)
 			continue
 		}
 
 		log.Println("⚡ New alert from Redis:", alert.SourceIP)
 
-		// 🔥 SEND TO WEBSOCKET
+		// 🔥 FIX 3: Safe WebSocket call (optional but good)
 		BroadcastAlert(alert)
 	}
 }

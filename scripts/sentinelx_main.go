@@ -71,7 +71,9 @@ func main() {
 
 storage.InitRedis()
 
-go stream.StartRedisSubscriber()
+if storage.RDB != nil {
+    go stream.StartRedisSubscriber()
+}
 
 	// ===============================
 	// ELASTICSEARCH (CONFIG-DRIVEN)
