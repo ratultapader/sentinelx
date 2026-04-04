@@ -69,10 +69,7 @@ func main() {
 		panic(err)
 	}
 
-	// ✅ 👉 ADD HERE
-if err := storage.InitRedis(); err != nil {
-	panic(err)
-}
+storage.InitRedis()
 
 go stream.StartRedisSubscriber()
 
